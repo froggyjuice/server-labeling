@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>회원가입/로그인</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 0;
+        padding: 20px;
+        background-color: #f5f5f5;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+      }
+      .container {
+        max-width: 400px;
+        width: 100%;
+        background: white;
+        padding: 30px;
+        border-radius: 10px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      }
+      .tabs {
+        display: flex;
+        margin-bottom: 20px;
+        border-bottom: 2px solid #eee;
+      }
+      .tab {
+        flex: 1;
+        padding: 15px;
+        text-align: center;
+        cursor: pointer;
+        border: none;
+        background: none;
+        font-size: 16px;
+        font-weight: bold;
+        color: #666;
+        transition: all 0.3s;
+      }
+      .tab.active {
+        color: #007bff;
+        border-bottom: 2px solid #007bff;
+      }
+      .tab-content {
+        display: none;
+      }
+      .tab-content.active {
+        display: block;
+      }
+      .form-group {
+        margin-bottom: 15px;
+      }
+      label {
+        display: block;
+        margin-bottom: 5px;
+        font-weight: bold;
+        color: #333;
+      }
+      input {
+        width: 100%;
+        padding: 12px;
+        border: 1px solid #ddd;
+        border-radius: 5px;
+        font-size: 14px;
+        box-sizing: border-box;
+      }
+      input:focus {
+        outline: none;
+        border-color: #007bff;
+        box-shadow: 0 0 0 2px rgba(0,123,255,0.25);
+      }
+      button {
+        width: 100%;
+        padding: 12px;
+        background-color: #007bff;
+        color: white;
+        border: none;
+        border-radius: 5px;
+        font-size: 16px;
+        cursor: pointer;
+        transition: background-color 0.3s;
+      }
+      button:hover {
+        background-color: #0056b3;
+      }
+      .message {
+        margin-top: 15px;
+        padding: 10px;
+        border-radius: 5px;
+        text-align: center;
+      }
+      .success {
+        background-color: #d4edda;
+        color: #155724;
+        border: 1px solid #c3e6cb;
+      }
+      .error {
+        background-color: #f8d7da;
+        color: #721c24;
+        border: 1px solid #f5c6cb;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="tabs">
+        <button class="tab active" onclick="switchTab('login')">로그인</button>
+        <button class="tab" onclick="switchTab('register')">회원가입</button>
+      </div>
+
+      <!-- 로그인 폼 -->
+      <div id="login-content" class="tab-content active">
+        <form id="login-form">
+          <div class="form-group">
+            <label for="login-username">사용자명</label>
+            <input type="text" id="login-username" name="username" required>
+          </div>
+          <div class="form-group">
+            <label for="login-password">비밀번호</label>
+            <input type="password" id="login-password" name="password" required>
+          </div>
+          <button type="submit">로그인</button>
+        </form>
+      </div>
+
+      <!-- 회원가입 폼 -->
+      <div id="register-content" class="tab-content">
+        <form id="register-form">
+          <div class="form-group">
+            <label for="register-username">사용자명</label>
+            <input type="text" id="register-username" name="username" required>
+          </div>
+          <div class="form-group">
+            <label for="register-email">이메일</label>
+            <input type="email" id="register-email" name="email" required>
+          </div>
+          <div class="form-group">
+            <label for="register-password">비밀번호</label>
+            <input type="password" id="register-password" name="password" required>
+          </div>
+          <div class="form-group">
+            <label for="register-confirm-password">비밀번호 확인</label>
+            <input type="password" id="register-confirm-password" name="confirm-password" required>
+          </div>
+          <button type="submit">회원가입</button>
+        </form>
+      </div>
+
+      <div id="message"></div>
+    </div>
+    
+    <script>
+      function switchTab(tabName) {
+        // 모든 탭 비활성화
+        document.querySelectorAll('.tab').forEach(tab => {
+          tab.classList.remove('active');
+        });
+        document.querySelectorAll('.tab-content').forEach(content => {
+          content.classList.remove('active');
+        });
+
+        // 선택된 탭 활성화
+        if (tabName === 'login') {
+          document.querySelector('.tab:first-child').classList.add('active');
+          document.getElementById('login-content').classList.add('active');
+        } else {
+          document.querySelector('.tab:last-child').classList.add('active');
+          document.getElementById('register-content').classList.add('active');
+        }
+      }
+
+      function showMessage(message, type) {
+        const messageDiv = document.getElementById('message');
+        messageDiv.textContent = message;
+        messageDiv.className = `message ${type}`;
+        setTimeout(() => {
+          messageDiv.textContent = '';
+          messageDiv.className = '';
+        }, 3000);
+      }
+
+      // 로그인 폼 제출
+      document.getElementById('login-form').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const formData = new FormData(this);
+        const data = {
+          username: formData.get('username'),
+          password: formData.get('password')
+        };
+
+        fetch('/api/login', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(data)
+        })
+        .then(response => response.json())
+        .then(data => {
+          if (data.success) {
+            showMessage('로그인 성공! 대시보드로 이동합니다...', 'success');
+            // 로그인 성공 후 대시보드로 리다이렉트 (리다이렉트는 현재 페이지에서 다른 페이지로 자동 이동하는 기능입니다)
+            setTimeout(() => {
+              window.location.href = '/dashboard';
+            }, 1500);
+          } else {
+            showMessage(data.error || '로그인 실패', 'error');
+          }
+        })
+        .catch(error => {
+          showMessage('서버 오류가 발생했습니다.', 'error');
+        });
+      });
+
+      // 회원가입 폼 제출
+      document.getElementById('register-form').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const formData = new FormData(this);
+        const password = formData.get('password');
+        const confirmPassword = formData.get('confirm-password');
+
+        if (password !== confirmPassword) {
+          showMessage('비밀번호가 일치하지 않습니다.', 'error');
+          return;
+        }
+
+        const data = {
+          username: formData.get('username'),
+          email: formData.get('email'),
+          password: password
+        };
+
+        fetch('/api/register', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(data)
+        })
+        .then(response => response.json())
+        .then(data => {
+          if (data.success) {
+            showMessage('회원가입 성공! 로그인 탭으로 이동합니다.', 'success');
+            // 회원가입 성공 후 로그인 탭으로 전환
+            setTimeout(() => {
+              switchTab('login');
+              document.getElementById('register-form').reset();
+            }, 1500);
+          } else {
+            showMessage(data.error || '회원가입 실패', 'error');
+          }
+        })
+        .catch(error => {
+          showMessage('서버 오류가 발생했습니다.', 'error');
+        });
+      });
+    </script>
+  </body>
+</html>
