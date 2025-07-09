@@ -1,0 +1,18 @@
+# Flask 웹 프레임워크 - 웹 애플리케이션을 구축하기 위한 Python 마이크로프레임워크
+Flask==2.3.3
+
+# Flask-CORS - 다른 도메인에서의 요청을 허용하는 CORS 지원
+Flask-CORS==4.0.0
+
+# Flask-SQLAlchemy - Flask에서 SQLAlchemy ORM을 사용하기 위한 확장
+Flask-SQLAlchemy==3.0.5
+
+# Werkzeug - WSGI 웹 애플리케이션 라이브러리 (Flask의 의존성, 파일 업로드 등에 사용)
+Werkzeug==2.3.7
+
+# SQLAlchemy - Python용 SQL 툴킷 및 ORM (객체 관계 매핑)
+SQLAlchemy==2.0.21
+
+# tkinter는 Python 표준 라이브러리에 포함되어 있어 별도 설치 불필요
+# sqlite3는 Python 표준 라이브러리에 포함되어 있어 별도 설치 불필요
+# os, sys, datetime, pathlib은 Python 표준 라이브러리에 포함되어 있어 별도 설치 불필요 
