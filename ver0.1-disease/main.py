@@ -22,7 +22,7 @@ db.init_app(app)
 
 # 파일 업로드 설정
 UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), 'uploads')
-ALLOWED_EXTENSIONS = {'txt', 'jpg', 'jpeg', 'png', 'dcm'}  # 허용할 파일 확장자 (텍스트 + 이미지 + DICOM)
+ALLOWED_EXTENSIONS = {'txt', 'jpg', 'jpeg', 'png'}  # 허용할 파일 확장자 (텍스트 + 이미지)
 
 def get_kst_now():
     """KST 기준 현재 시간 반환"""
@@ -89,7 +89,7 @@ def add_sample_data():
             # uploads 폴더의 파일들을 데이터베이스에 등록
             if os.path.exists(UPLOAD_FOLDER):
                 for filename in os.listdir(UPLOAD_FOLDER):
-                    if filename.lower().endswith(('.txt', '.jpg', '.jpeg', '.png', '.dcm')):
+                    if filename.lower().endswith(('.txt', '.jpg', '.jpeg', '.png')):
                         file_path = os.path.join(UPLOAD_FOLDER, filename)
                         file_size = os.path.getsize(file_path)
                         
@@ -252,7 +252,7 @@ def get_file_content(file_id):
     file = File.query.get_or_404(file_id)
     try:
         # 이미지 파일인지 확인
-        if file.filename.lower().endswith(('.jpg', '.jpeg', '.png', '.dcm')):
+        if file.filename.lower().endswith(('.jpg', '.jpeg', '.png')):
             return jsonify({
                 'success': True,
                 'content': None,
