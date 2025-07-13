@@ -86,24 +86,13 @@ class DatabaseViewer:
         self.notebook.add(labels_frame, text="라벨링 정보")
         
         # 트리뷰 생성
-        columns = ('ID', '사용자명', '파일명', '질환', '사진종류', '번호', '흉부X선소견', '최종기록일시')
+        columns = ('ID', '사용자명', '파일명', '라벨', '라벨링일')
         self.labels_tree = ttk.Treeview(labels_frame, columns=columns, show='headings')
         
         # 컬럼 설정
-        column_widths = {
-            'ID': 50,
-            '사용자명': 100,
-            '파일명': 120,
-            '질환': 200,
-            '사진종류': 80,
-            '번호': 80,
-            '흉부X선소견': 250,
-            '최종기록일시': 150
-        }
-        
         for col in columns:
             self.labels_tree.heading(col, text=col)
-            self.labels_tree.column(col, width=column_widths.get(col, 100))
+            self.labels_tree.column(col, width=150)
         
         # 스크롤바
         labels_scrollbar = ttk.Scrollbar(labels_frame, orient='vertical', command=self.labels_tree.yview)
@@ -179,9 +168,9 @@ class DatabaseViewer:
             for item in self.labels_tree.get_children():
                 self.labels_tree.delete(item)
             
-            # 라벨링 데이터 조회 (새로운 구조)
+            # 라벨링 데이터 조회
             cursor.execute("""
-                SELECT l.id, u.username, f.filename, l.disease, l.view_type, l.code, l.description, l.created_at
+                SELECT l.id, u.username, f.filename, l.label_type, l.created_at
                 FROM label l
                 JOIN user u ON l.user_id = u.id
                 JOIN file f ON l.file_id = f.id
@@ -191,15 +180,10 @@ class DatabaseViewer:
             
             # 트리뷰에 데이터 추가
             for label in labels:
+                # 라벨 값을 한글로 변환
+                label_text = "좋아요" if label[3] == "like" else "싫어요" if label[3] == "dislike" else label[3]
                 self.labels_tree.insert('', 'end', values=(
-                    label[0],  # ID
-                    label[1],  # 사용자명
-                    label[2],  # 파일명
-                    label[3],  # 질환
-                    label[4],  # 사진종류
-                    label[5],  # 번호
-                    label[6],  # 흉부X선소견
-                    label[7]   # 최종기록일시
+                    label[0], label[1], label[2], label_text, label[4]
                 ))
             
             conn.close()

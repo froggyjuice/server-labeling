@@ -1,0 +1,18 @@
+# Flask web framework - Python microframework for building web applications
+Flask==2.3.3
+
+# Flask-CORS - CORS support for allowing requests from different domains
+Flask-CORS==4.0.0
+
+# Flask-SQLAlchemy - Flask extension for using SQLAlchemy ORM
+Flask-SQLAlchemy==3.0.5
+
+# Werkzeug - WSGI web application library (Flask dependency, used for file uploads etc.)
+Werkzeug==2.3.7
+
+# SQLAlchemy - SQL toolkit and ORM for Python (Object Relational Mapping)
+SQLAlchemy==2.0.23
+
+# tkinter is included in Python standard library, no separate installation needed
+# sqlite3 is included in Python standard library, no separate installation needed
+# os, sys, datetime, pathlib are included in Python standard library, no separate installation needed 

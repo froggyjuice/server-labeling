@@ -1,6 +1,5 @@
 import os
 import sys
-from datetime import datetime, timezone, timedelta
 
 from flask import Flask, send_from_directory, request, jsonify, session, redirect, url_for, send_file
 from flask_cors import CORS
@@ -23,12 +22,6 @@ db.init_app(app)
 # 파일 업로드 설정
 UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), 'uploads')
 ALLOWED_EXTENSIONS = {'txt', 'jpg', 'jpeg', 'png'}  # 허용할 파일 확장자 (텍스트 + 이미지)
-
-def get_kst_now():
-    """KST 기준 현재 시간 반환"""
-    utc_now = datetime.now(timezone.utc)
-    kst = timezone(timedelta(hours=9))
-    return utc_now.astimezone(kst)
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
@@ -205,33 +198,15 @@ def get_files():
         # 현재 사용자의 라벨링 정보 추가
         if user_id:
             user_label = Label.query.filter_by(user_id=user_id, file_id=file.id).first()
-            if user_label:
-                file_dict['user_label'] = {
-                    'disease': user_label.disease,
-                    'view_type': user_label.view_type,
-                    'code': user_label.code,
-                    'description': user_label.description
-                }
-            else:
-                file_dict['user_label'] = None
+            file_dict['user_label'] = user_label.label_type if user_label else None
         else:
             file_dict['user_label'] = None
         
-        # 전체 라벨링 통계 추가 (질환별)
-        disease_stats = {}
-        diseases = [
-            'Respiratory Distress Syndrome', 'Bronchopulmonary Dysplasia', 
-            'Pneumothorax', 'Pulmonary Interstitial Emphysema', 
-            'Pneumomediastinum', 'Subcutaneous Emphysema', 
-            'Pneumopericardium', 'Necrotizing Enterocolitis'
-        ]
-        
-        for disease in diseases:
-            count = Label.query.filter_by(file_id=file.id, disease=disease).count()
-            disease_stats[disease] = count
-        
-        file_dict['disease_stats'] = disease_stats
-        file_dict['total_labels'] = sum(disease_stats.values())
+        # 전체 라벨링 통계 추가
+        like_count = Label.query.filter_by(file_id=file.id, label_type='like').count()
+        dislike_count = Label.query.filter_by(file_id=file.id, label_type='dislike').count()
+        file_dict['like_count'] = like_count
+        file_dict['dislike_count'] = dislike_count
         
         files_with_labels.append(file_dict)
     
@@ -300,59 +275,34 @@ def add_label():
     try:
         data = request.get_json()
         
-        # 새로운 필수 필드들
-        required_fields = ['file_id', 'disease', 'view_type', 'code', 'description']
-        if not all(key in data for key in required_fields):
-            return jsonify({'success': False, 'error': '모든 필수 필드를 입력해주세요.'}), 400
+        if not all(key in data for key in ['file_id', 'label_type']):
+            return jsonify({'success': False, 'error': '파일 ID와 라벨 타입이 필요합니다.'}), 400
         
         file_id = data['file_id']
-        disease = data['disease']
-        view_type = data['view_type']
-        code = data['code']
-        description = data['description']
+        label_type = data['label_type']
         
-        # 질환 유효성 검사
-        valid_diseases = [
-            'Respiratory Distress Syndrome', 'Bronchopulmonary Dysplasia', 
-            'Pneumothorax', 'Pulmonary Interstitial Emphysema', 
-            'Pneumomediastinum', 'Subcutaneous Emphysema', 
-            'Pneumopericardium', 'Necrotizing Enterocolitis'
-        ]
-        if disease not in valid_diseases:
-            return jsonify({'success': False, 'error': '올바르지 않은 질환입니다.'}), 400
+        if label_type not in ['like', 'dislike']:
+            return jsonify({'success': False, 'error': '올바르지 않은 라벨 타입입니다.'}), 400
         
-        # 사진 종류 유효성 검사
-        valid_view_types = ['AP', 'LATDEQ', 'LAT', 'PA']
-        if view_type not in valid_view_types:
-            return jsonify({'success': False, 'error': '올바르지 않은 사진 종류입니다.'}), 400
-        
-        # 기존 라벨 확인 (업데이트식 구조 유지)
+        # 기존 라벨 확인
         existing_label = Label.query.filter_by(
             user_id=session['user_id'], 
             file_id=file_id
         ).first()
         
         if existing_label:
-            # 기존 라벨이 있으면 업데이트 (덮어쓰기)
-            existing_label.disease = disease
-            existing_label.view_type = view_type
-            existing_label.code = code
-            existing_label.description = description
-            existing_label.created_at = get_kst_now()  # KST 기준으로 업데이트
-            message = f"라벨이 업데이트되었습니다: {disease} - {code}"
+            # 기존 라벨이 있으면 업데이트
+            existing_label.label_type = label_type
+            message = f"라벨이 '{label_type}'로 업데이트되었습니다."
         else:
             # 새 라벨 생성
             new_label = Label(
                 user_id=session['user_id'],
                 file_id=file_id,
-                disease=disease,
-                view_type=view_type,
-                code=code,
-                description=description,
-                created_at=get_kst_now()  # KST 기준으로 생성
+                label_type=label_type
             )
             db.session.add(new_label)
-            message = f"라벨이 추가되었습니다: {disease} - {code}"
+            message = f"'{label_type}' 라벨이 추가되었습니다."
         
         db.session.commit()
         
@@ -371,54 +321,27 @@ def get_label_stats():
     try:
         # 전체 통계
         total_labels = Label.query.count()
-        
-        # 질환별 통계
-        disease_stats = {}
-        diseases = [
-            'Respiratory Distress Syndrome', 'Bronchopulmonary Dysplasia', 
-            'Pneumothorax', 'Pulmonary Interstitial Emphysema', 
-            'Pneumomediastinum', 'Subcutaneous Emphysema', 
-            'Pneumopericardium', 'Necrotizing Enterocolitis'
-        ]
-        
-        for disease in diseases:
-            count = Label.query.filter_by(disease=disease).count()
-            disease_stats[disease] = count
-        
-        # 사진 종류별 통계
-        view_stats = {}
-        view_types = ['AP', 'LATDEQ', 'LAT', 'PA']
-        for view_type in view_types:
-            count = Label.query.filter_by(view_type=view_type).count()
-            view_stats[view_type] = count
+        like_count = Label.query.filter_by(label_type='like').count()
+        dislike_count = Label.query.filter_by(label_type='dislike').count()
         
         # 사용자별 통계
         user_stats = {}
         if 'user_id' in session:
             user_labels = Label.query.filter_by(user_id=session['user_id']).all()
-            user_disease_stats = {}
-            user_view_stats = {}
-            
-            for disease in diseases:
-                count = sum(1 for label in user_labels if label.disease == disease)
-                user_disease_stats[disease] = count
-            
-            for view_type in view_types:
-                count = sum(1 for label in user_labels if label.view_type == view_type)
-                user_view_stats[view_type] = count
-            
+            user_like_count = sum(1 for label in user_labels if label.label_type == 'like')
+            user_dislike_count = sum(1 for label in user_labels if label.label_type == 'dislike')
             user_stats = {
                 'total': len(user_labels),
-                'diseases': user_disease_stats,
-                'view_types': user_view_stats
+                'like': user_like_count,
+                'dislike': user_dislike_count
             }
         
         return jsonify({
             'success': True,
             'total': {
                 'total_labels': total_labels,
-                'diseases': disease_stats,
-                'view_types': view_stats
+                'like_count': like_count,
+                'dislike_count': dislike_count
             },
             'user': user_stats
         }), 200
@@ -582,106 +505,6 @@ def dashboard():
                 background-color: #f8d7da;
                 color: #721c24;
             }}
-            
-            /* 모달 스타일 */
-            .modal {{
-                display: none;
-                position: fixed;
-                z-index: 1000;
-                left: 0;
-                top: 0;
-                width: 100%;
-                height: 100%;
-                background-color: rgba(0,0,0,0.5);
-            }}
-            
-            .modal-content {{
-                background-color: white;
-                margin: 5% auto;
-                padding: 0;
-                border-radius: 10px;
-                width: 80%;
-                max-width: 600px;
-                box-shadow: 0 4px 20px rgba(0,0,0,0.3);
-            }}
-            
-            .modal-header {{
-                padding: 20px;
-                border-bottom: 1px solid #eee;
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-            }}
-            
-            .modal-header h2 {{
-                margin: 0;
-                color: #333;
-            }}
-            
-            .close {{
-                color: #aaa;
-                font-size: 28px;
-                font-weight: bold;
-                cursor: pointer;
-            }}
-            
-            .close:hover {{
-                color: #000;
-            }}
-            
-            .modal-body {{
-                padding: 20px;
-            }}
-            
-            .form-group {{
-                margin-bottom: 20px;
-            }}
-            
-            .form-group label {{
-                display: block;
-                margin-bottom: 5px;
-                font-weight: bold;
-                color: #333;
-            }}
-            
-            .form-group select,
-            .form-group input,
-            .form-group textarea {{
-                width: 100%;
-                padding: 10px;
-                border: 1px solid #ddd;
-                border-radius: 5px;
-                font-size: 14px;
-            }}
-            
-            .form-group textarea {{
-                height: 80px;
-                resize: vertical;
-            }}
-            
-            .symptom-checkbox {{
-                margin: 5px 0;
-            }}
-            
-            .symptom-checkbox input {{
-                width: auto;
-                margin-right: 10px;
-            }}
-            
-            .modal-footer {{
-                padding: 20px;
-                border-top: 1px solid #eee;
-                text-align: right;
-            }}
-            
-            .modal-footer button {{
-                margin-left: 10px;
-            }}
-            
-            .btn-secondary {{
-                background-color: #6c757d;
-                color: white;
-            }}
         </style>
     </head>
     <body>
@@ -719,64 +542,6 @@ def dashboard():
             </div>
         </div>
         
-        <!-- 라벨링 모달 -->
-        <div id="labelingModal" class="modal" style="display: none;">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h2>🏷️ 라벨링</h2>
-                    <span class="close" onclick="closeLabelingModal()">&times;</span>
-                </div>
-                <div class="modal-body">
-                    <div class="form-group">
-                        <label for="diseaseSelect">질환 선택:</label>
-                        <select id="diseaseSelect" onchange="updateSymptoms()">
-                            <option value="">질환을 선택하세요</option>
-                            <option value="Respiratory Distress Syndrome">Respiratory Distress Syndrome</option>
-                            <option value="Bronchopulmonary Dysplasia">Bronchopulmonary Dysplasia</option>
-                            <option value="Pneumothorax">Pneumothorax</option>
-                            <option value="Pulmonary Interstitial Emphysema">Pulmonary Interstitial Emphysema</option>
-                            <option value="Pneumomediastinum">Pneumomediastinum</option>
-                            <option value="Subcutaneous Emphysema">Subcutaneous Emphysema</option>
-                            <option value="Pneumopericardium">Pneumopericardium</option>
-                            <option value="Necrotizing Enterocolitis">Necrotizing Enterocolitis</option>
-                        </select>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label for="viewTypeSelect">사진 종류:</label>
-                        <select id="viewTypeSelect">
-                            <option value="">사진 종류를 선택하세요</option>
-                            <option value="AP">AP</option>
-                            <option value="LATDEQ">LATDEQ</option>
-                            <option value="LAT">LAT</option>
-                            <option value="PA">PA</option>
-                        </select>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label>흉부 X선 소견 (복수 선택 가능):</label>
-                        <div id="symptomsContainer">
-                            <p>질환을 먼저 선택해주세요.</p>
-                        </div>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label for="codeInput">번호:</label>
-                        <input type="text" id="codeInput" placeholder="예: RDS_1, RDS_2" readonly>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label for="descriptionInput">최종 소견:</label>
-                        <textarea id="descriptionInput" placeholder="선택된 소견들이 자동으로 입력됩니다." readonly></textarea>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button onclick="submitLabeling()" class="btn btn-primary">라벨링 저장</button>
-                    <button onclick="closeLabelingModal()" class="btn btn-secondary">취소</button>
-                </div>
-            </div>
-        </div>
-        
         <script>
             // 파일 목록 로드
             function loadFiles() {{
@@ -796,7 +561,7 @@ def dashboard():
             // 통계 업데이트
             function updateStats(files) {{
                 const totalFiles = files.length;
-                const totalLabels = files.reduce((sum, file) => sum + file.total_labels, 0);
+                const totalLabels = files.reduce((sum, file) => sum + file.like_count + file.dislike_count, 0);
                 const userLabels = files.filter(file => file.user_label).length;
                 
                 document.getElementById('totalFiles').textContent = totalFiles;
@@ -817,161 +582,31 @@ def dashboard():
                                    file.filename.toLowerCase().endsWith('.jpeg') || 
                                    file.filename.toLowerCase().endsWith('.png');
                     
-                    // 질환별 라벨링 통계 표시
-                    const diseaseStats = file.disease_stats || {{}};
-                    const totalLabels = file.total_labels || 0;
-                    
                     return `
                         <div class="file-item">
                             <div class="file-info">
                                 <strong>${{file.filename}}</strong><br>
                                 <small>업로드: ${{file.uploaded_by}} | 크기: ${{(file.file_size / 1024).toFixed(1)}}KB</small><br>
-                                <small>라벨링 기록: ${{file.user_label ? '✅' : '✖️'}}</small>
+                                <small>👍 ${{file.like_count}} | 👎 ${{file.dislike_count}}</small>
                                 ${{isImage ? `<br><img src="/api/files/${{file.id}}/image" style="max-width: 200px; max-height: 150px; margin-top: 10px; border-radius: 5px;">` : ''}}
                             </div>
                             <div class="file-actions">
                                 <div class="label-buttons">
-                                    <button class="label-btn like-btn" onclick="openLabelingModal(${{file.id}})">🏷️ 라벨링</button>
+                                    <button class="label-btn like-btn ${{file.user_label === 'like' ? 'active' : ''}}" 
+                                            onclick="addLabel(${{file.id}}, 'like')">👍 좋아요</button>
+                                    <button class="label-btn dislike-btn ${{file.user_label === 'dislike' ? 'active' : ''}}" 
+                                            onclick="addLabel(${{file.id}}, 'dislike')">👎 싫어요</button>
                                 </div>
                                 <button class="btn btn-primary" onclick="viewContent(${{file.id}})">${{isImage ? '이미지보기' : '내용보기'}}</button>
+                                <a href="/api/files/${{file.id}}/download" class="btn btn-success">다운로드</a>
                             </div>
                         </div>
                     `;
                 }}).join('');
             }}
             
-            // 전역 변수
-            let currentFileId = null;
-            
-            // 라벨링 모달 열기
-            function openLabelingModal(fileId) {{
-                currentFileId = fileId;
-                document.getElementById('labelingModal').style.display = 'block';
-                resetModal();
-            }}
-            
-            // 모달 닫기
-            function closeLabelingModal() {{
-                document.getElementById('labelingModal').style.display = 'none';
-                currentFileId = null;
-            }}
-            
-            // 모달 초기화
-            function resetModal() {{
-                document.getElementById('diseaseSelect').value = '';
-                document.getElementById('viewTypeSelect').value = '';
-                document.getElementById('codeInput').value = '';
-                document.getElementById('descriptionInput').value = '';
-                document.getElementById('symptomsContainer').innerHTML = '<p>질환을 먼저 선택해주세요.</p>';
-            }}
-            
-            // 질환 선택에 따른 소견 업데이트
-            function updateSymptoms() {{
-                const disease = document.getElementById('diseaseSelect').value;
-                const container = document.getElementById('symptomsContainer');
-                
-                if (!disease) {{
-                    container.innerHTML = '<p>질환을 먼저 선택해주세요.</p>';
-                    return;
-                }}
-                
-                const symptoms = getSymptomsByDisease(disease);
-                let html = '';
-                
-                symptoms.forEach(symptom => {{
-                    html += `
-                        <div class="symptom-checkbox">
-                            <input type="checkbox" id="${{symptom.code}}" value="${{symptom.code}}" onchange="updateCodeAndDescription()">
-                            <label for="${{symptom.code}}">${{symptom.description}}</label>
-                        </div>
-                    `;
-                }});
-                
-                container.innerHTML = html;
-            }}
-            
-            // 질환별 소견 데이터
-            function getSymptomsByDisease(disease) {{
-                const symptoms = {{
-                    'Respiratory Distress Syndrome': [
-                        {{code: 'RDS_1', description: '폐용적의 감소(Hypoventilation)'}},
-                        {{code: 'RDS_2', description: '폐포 허탈로 인한 과립성 음영 (Ground Glass Appearance)'}},
-                        {{code: 'RDS_3', description: '기관지 내 음영 (Air-bronchogram)'}},
-                        {{code: 'RDS_4', description: '폐 전체 white-out 양상, 심장 경계 불분명'}}
-                    ],
-                    'Bronchopulmonary Dysplasia': [
-                        {{code: 'BPD_1', description: '미만성 음영 증가'}},
-                        {{code: 'BPD_2', description: '폐용적 정상 또는 감소'}},
-                        {{code: 'BPD_3', description: '전반적 과팽창'}},
-                        {{code: 'BPD_4', description: '무기폐와 과투과성 부위 혼재'}}
-                    ],
-                    'Pneumothorax': [
-                        {{code: 'PTX_1', description: '종격동의 반대쪽 이동(Chest AP)'}},
-                        {{code: 'PTX_2', description: '편평해진 횡격막(기흉쪽)'}},
-                        {{code: 'PTX_3', description: '기흉 쪽 폐의 허탈'}},
-                        {{code: 'PTX_4', description: 'Lateral decubitus에서 소기흉 확인 가능'}},
-                        {{code: 'PTX_5', description: 'Cross-table lateral: 팬케이크 모양의 공기'}}
-                    ],
-                    'Pulmonary Interstitial Emphysema': [
-                        {{code: 'PIE_1', description: '낭성 또는 선상의 공기 음영 (국소/양폐)'}}
-                    ],
-                    'Pneumomediastinum': [
-                        {{code: 'PMS_1', description: '흉부 중앙의 공기 음영'}},
-                        {{code: 'PMS_2', description: '흉선 주위의 공기, "요트의 돛" (sail sign)'}},
-                        {{code: 'PMS_3', description: 'Lateral view에서 명확히 관찰됨'}}
-                    ],
-                    'Subcutaneous Emphysema': [
-                        {{code: 'SEM_1', description: '-'}}
-                    ],
-                    'Pneumopericardium': [
-                        {{code: 'PPC_1', description: '심장하부의 공기 음영'}}
-                    ],
-                    'Necrotizing Enterocolitis': [
-                        {{code: 'NEC_1', description: '장 마비 (Ileus)'}},
-                        {{code: 'NEC_2', description: '장벽 내 공기 (Pneumatosis Intestinalis)'}},
-                        {{code: 'NEC_3', description: 'Portal 또는 Hepatic vein gas'}},
-                        {{code: 'NEC_4', description: '복수 (Ascites)'}},
-                        {{code: 'NEC_5', description: '복강 내 공기 (Pneumoperitoneum)'}}
-                    ]
-                }};
-                
-                return symptoms[disease] || [];
-            }}
-            
-            // 선택된 소견에 따라 코드와 설명 업데이트
-            function updateCodeAndDescription() {{
-                const checkboxes = document.querySelectorAll('#symptomsContainer input[type="checkbox"]:checked');
-                const codes = [];
-                const descriptions = [];
-                
-                checkboxes.forEach(checkbox => {{
-                    codes.push(checkbox.value);
-                    const label = document.querySelector(`label[for="${{checkbox.value}}"]`);
-                    descriptions.push(label.textContent);
-                }});
-                
-                document.getElementById('codeInput').value = codes.join(', ');
-                document.getElementById('descriptionInput').value = descriptions.join('\\n');
-            }}
-            
-            // 라벨링 제출
-            function submitLabeling() {{
-                const disease = document.getElementById('diseaseSelect').value;
-                const viewType = document.getElementById('viewTypeSelect').value;
-                const code = document.getElementById('codeInput').value;
-                const description = document.getElementById('descriptionInput').value;
-                
-                if (!disease || !viewType || !code || !description) {{
-                    showMessage('모든 필드를 입력해주세요.', 'error');
-                    return;
-                }}
-                
-                addLabel(currentFileId, disease, viewType, code, description);
-                closeLabelingModal();
-            }}
-            
             // 라벨링 추가
-            function addLabel(fileId, disease, viewType, code, description) {{
+            function addLabel(fileId, labelType) {{
                 fetch('/api/label', {{
                     method: 'POST',
                     headers: {{
@@ -979,10 +614,7 @@ def dashboard():
                     }},
                     body: JSON.stringify({{
                         file_id: fileId,
-                        disease: disease,
-                        view_type: viewType,
-                        code: code,
-                        description: description
+                        label_type: labelType
                     }})
                 }})
                 .then(response => response.json())
