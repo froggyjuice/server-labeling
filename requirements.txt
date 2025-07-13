@@ -16,3 +16,6 @@ SQLAlchemy==2.0.23
 # tkinter is included in Python standard library, no separate installation needed
 # sqlite3 is included in Python standard library, no separate installation needed
 # os, sys, datetime, pathlib are included in Python standard library, no separate installation needed 
+pydicom
+Pillow
+numpy 

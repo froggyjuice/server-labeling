@@ -48,7 +48,7 @@ def upload_files_from_folder(folder_path):
             print(f"uploads 폴더를 생성했습니다: {UPLOAD_FOLDER}")
         
         # 폴더 내 파일들 처리
-        allowed_extensions = {'.txt', '.jpg', '.jpeg', '.png'}
+        allowed_extensions = {'.txt', '.jpg', '.jpeg', '.png', '.dcm'}
         uploaded_count = 0
         skipped_count = 0
         
