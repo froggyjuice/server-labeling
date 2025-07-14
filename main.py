@@ -365,6 +365,41 @@ def add_label():
         db.session.rollback()
         return jsonify({'success': False, 'error': '서버 오류가 발생했습니다.'}), 500
 
+# 사용자 라벨링 기록 조회 API
+@app.route('/api/label/history/<int:file_id>', methods=['GET'])
+def get_user_label_history(file_id):
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'error': '로그인이 필요합니다.'}), 401
+    
+    try:
+        # 현재 사용자의 해당 파일에 대한 라벨링 기록 조회
+        label = Label.query.filter_by(
+            user_id=session['user_id'], 
+            file_id=file_id
+        ).first()
+        
+        if label:
+            return jsonify({
+                'success': True,
+                'has_history': True,
+                'label': {
+                    'disease': label.disease,
+                    'view_type': label.view_type,
+                    'code': label.code,
+                    'description': label.description,
+                    'created_at': label.created_at.strftime('%Y-%m-%d %H:%M:%S') if label.created_at else None
+                }
+            }), 200
+        else:
+            return jsonify({
+                'success': True,
+                'has_history': False,
+                'message': '이 파일에 대한 라벨링 기록이 없습니다.'
+            }), 200
+            
+    except Exception as e:
+        return jsonify({'success': False, 'error': '서버 오류가 발생했습니다.'}), 500
+
 # 라벨링 통계 API 엔드포인트
 @app.route('/api/label/stats', methods=['GET'])
 def get_label_stats():
@@ -538,15 +573,15 @@ def dashboard():
                 background-color: #28a745;
                 color: white;
             }}
-            .dislike-btn {{
-                background-color: #dc3545;
+            .history-btn {{
+                background-color: #17a2b8;
                 color: white;
             }}
-            .like-btn.active {{
-                background-color: #155724;
+            .like-btn:hover {{
+                background-color: #218838;
             }}
-            .dislike-btn.active {{
-                background-color: #721c24;
+            .history-btn:hover {{
+                background-color: #138496;
             }}
             .stats {{
                 display: flex;
@@ -682,6 +717,75 @@ def dashboard():
                 background-color: #6c757d;
                 color: white;
             }}
+            
+            .history-item {{
+                padding: 20px;
+                background-color: #f8f9fa;
+                border-radius: 8px;
+                margin-bottom: 15px;
+            }}
+            
+            .history-details {{
+                margin-top: 15px;
+            }}
+            
+            .history-details p {{
+                margin: 8px 0;
+                line-height: 1.5;
+            }}
+            
+            .description-box {{
+                background-color: white;
+                border: 1px solid #ddd;
+                border-radius: 5px;
+                padding: 10px;
+                margin: 10px 0;
+                white-space: pre-line;
+                font-family: monospace;
+                font-size: 14px;
+                max-height: 200px;
+                overflow-y: auto;
+            }}
+            
+            /* 탭 스타일 */
+            .tab-container {{
+                margin-top: 20px;
+            }}
+            
+            .tab-buttons {{
+                display: flex;
+                border-bottom: 2px solid #dee2e6;
+                margin-bottom: 20px;
+            }}
+            
+            .tab-btn {{
+                padding: 12px 24px;
+                background-color: #f8f9fa;
+                border: none;
+                border-bottom: 3px solid transparent;
+                cursor: pointer;
+                font-size: 14px;
+                font-weight: 500;
+                color: #6c757d;
+                transition: all 0.3s ease;
+            }}
+            
+            .tab-btn:hover {{
+                background-color: #e9ecef;
+                color: #495057;
+            }}
+            
+            .tab-btn.active {{
+                background-color: #007bff;
+                color: white;
+                border-bottom-color: #007bff;
+            }}
+            
+            .tab-content {{
+                min-height: 200px;
+            }}
+            
+
         </style>
     </head>
     <body>
@@ -700,10 +804,6 @@ def dashboard():
                     <div class="stat-label">총 파일</div>
                 </div>
                 <div class="stat-item">
-                    <div class="stat-number" id="totalLabels">0</div>
-                    <div class="stat-label">총 라벨링</div>
-                </div>
-                <div class="stat-item">
                     <div class="stat-number" id="userLabels">0</div>
                     <div class="stat-label">내 라벨링</div>
                 </div>
@@ -715,7 +815,16 @@ def dashboard():
             
             <div class="file-list">
                 <h3>📋 라벨링할 파일 목록</h3>
-                <div id="fileList">로딩 중...</div>
+                <div class="tab-container">
+                    <div class="tab-buttons">
+                        <button class="tab-btn active" onclick="switchTab('all')">전체</button>
+                        <button class="tab-btn" onclick="switchTab('completed')">완료</button>
+                        <button class="tab-btn" onclick="switchTab('incomplete')">미완료</button>
+                    </div>
+                    <div class="tab-content">
+                        <div id="fileList">로딩 중...</div>
+                    </div>
+                </div>
             </div>
         </div>
         
@@ -739,6 +848,7 @@ def dashboard():
                             <option value="Subcutaneous Emphysema">Subcutaneous Emphysema</option>
                             <option value="Pneumopericardium">Pneumopericardium</option>
                             <option value="Necrotizing Enterocolitis">Necrotizing Enterocolitis</option>
+                            <option value="직접 입력">직접 입력</option>
                         </select>
                     </div>
                     
@@ -777,6 +887,22 @@ def dashboard():
             </div>
         </div>
         
+        <!-- 라벨링 기록 모달 -->
+        <div id="historyModal" class="modal" style="display: none;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>📋 라벨링 기록</h2>
+                    <span class="close" onclick="closeHistoryModal()">&times;</span>
+                </div>
+                <div class="modal-body" id="historyContent">
+                    <!-- 기록 내용이 여기에 표시됩니다 -->
+                </div>
+                <div class="modal-footer">
+                    <button onclick="closeHistoryModal()" class="btn btn-secondary">닫기</button>
+                </div>
+            </div>
+        </div>
+        
         <script>
             // 파일 목록 로드
             function loadFiles() {{
@@ -784,8 +910,9 @@ def dashboard():
                 .then(response => response.json())
                 .then(data => {{
                     if (data.success) {{
-                        displayFiles(data.files);
-                        updateStats(data.files);
+                        allFiles = data.files;
+                        displayFilesByTab();
+                        updateStats(allFiles);
                     }}
                 }})
                 .catch(error => {{
@@ -793,16 +920,49 @@ def dashboard():
                 }});
             }}
             
+            // 탭 전환
+            function switchTab(tabName) {{
+                currentTab = tabName;
+                
+                // 탭 버튼 활성화 상태 변경
+                document.querySelectorAll('.tab-btn').forEach(btn => {{
+                    btn.classList.remove('active');
+                }});
+                event.target.classList.add('active');
+                
+                // 파일 목록 필터링 및 표시
+                displayFilesByTab();
+            }}
+            
+            // 탭에 따른 파일 목록 표시
+            function displayFilesByTab() {{
+                let filteredFiles = [];
+                
+                switch(currentTab) {{
+                    case 'all':
+                        filteredFiles = allFiles;
+                        break;
+                    case 'completed':
+                        filteredFiles = allFiles.filter(file => file.user_label);
+                        break;
+                    case 'incomplete':
+                        filteredFiles = allFiles.filter(file => !file.user_label);
+                        break;
+                }}
+                
+                displayFiles(filteredFiles);
+            }}
+            
             // 통계 업데이트
             function updateStats(files) {{
                 const totalFiles = files.length;
-                const totalLabels = files.reduce((sum, file) => sum + file.total_labels, 0);
                 const userLabels = files.filter(file => file.user_label).length;
                 
                 document.getElementById('totalFiles').textContent = totalFiles;
-                document.getElementById('totalLabels').textContent = totalLabels;
                 document.getElementById('userLabels').textContent = userLabels;
             }}
+            
+
             
             // 파일 목록 표시
             function displayFiles(files) {{
@@ -832,6 +992,7 @@ def dashboard():
                             <div class="file-actions">
                                 <div class="label-buttons">
                                     <button class="label-btn like-btn" onclick="openLabelingModal(${{file.id}})">🏷️ 라벨링</button>
+                                    <button class="label-btn history-btn" onclick="viewLabelHistory(${{file.id}})">📋 기록보기</button>
                                 </div>
                                 <button class="btn btn-primary" onclick="viewContent(${{file.id}})">${{isImage ? '이미지보기' : '내용보기'}}</button>
                             </div>
@@ -842,6 +1003,8 @@ def dashboard():
             
             // 전역 변수
             let currentFileId = null;
+            let allFiles = [];
+            let currentTab = 'all';
             
             // 라벨링 모달 열기
             function openLabelingModal(fileId) {{
@@ -869,9 +1032,23 @@ def dashboard():
             function updateSymptoms() {{
                 const disease = document.getElementById('diseaseSelect').value;
                 const container = document.getElementById('symptomsContainer');
+                const codeInput = document.getElementById('codeInput');
+                const descriptionInput = document.getElementById('descriptionInput');
                 
                 if (!disease) {{
                     container.innerHTML = '<p>질환을 먼저 선택해주세요.</p>';
+                    codeInput.readOnly = true;
+                    descriptionInput.readOnly = true;
+                    return;
+                }}
+                
+                if (disease === '직접 입력') {{
+                    container.innerHTML = '<p>소견을 직접 입력해주세요.</p>';
+                    codeInput.readOnly = true;
+                    codeInput.value = 'pass';
+                    descriptionInput.readOnly = false;
+                    descriptionInput.placeholder = '소견을 직접 입력해주세요';
+                    descriptionInput.value = '';
                     return;
                 }}
                 
@@ -888,6 +1065,8 @@ def dashboard():
                 }});
                 
                 container.innerHTML = html;
+                codeInput.readOnly = true;
+                descriptionInput.readOnly = true;
             }}
             
             // 질환별 소견 데이터
@@ -932,7 +1111,8 @@ def dashboard():
                         {{code: 'NEC_3', description: 'Portal 또는 Hepatic vein gas'}},
                         {{code: 'NEC_4', description: '복수 (Ascites)'}},
                         {{code: 'NEC_5', description: '복강 내 공기 (Pneumoperitoneum)'}}
-                    ]
+                    ],
+                    '직접 입력': []
                 }};
                 
                 return symptoms[disease] || [];
@@ -940,6 +1120,13 @@ def dashboard():
             
             // 선택된 소견에 따라 코드와 설명 업데이트
             function updateCodeAndDescription() {{
+                const disease = document.getElementById('diseaseSelect').value;
+                
+                // 직접 입력인 경우 처리하지 않음
+                if (disease === '직접 입력') {{
+                    return;
+                }}
+                
                 const checkboxes = document.querySelectorAll('#symptomsContainer input[type="checkbox"]:checked');
                 const codes = [];
                 const descriptions = [];
@@ -961,8 +1148,14 @@ def dashboard():
                 const code = document.getElementById('codeInput').value;
                 const description = document.getElementById('descriptionInput').value;
                 
-                if (!disease || !viewType || !code || !description) {{
+                if (!disease || !viewType || !description) {{
                     showMessage('모든 필드를 입력해주세요.', 'error');
+                    return;
+                }}
+                
+                // 직접 입력이 아닌 경우에만 코드 검증
+                if (disease !== '직접 입력' && !code) {{
+                    showMessage('소견을 선택해주세요.', 'error');
                     return;
                 }}
                 
@@ -990,6 +1183,10 @@ def dashboard():
                     if (data.success) {{
                         showMessage(data.message, 'success');
                         loadFiles(); // 파일 목록 새로고침
+                        // 탭 상태 유지
+                        setTimeout(() => {{
+                            displayFilesByTab();
+                        }}, 100);
                     }} else {{
                         showMessage(data.error || '라벨링 실패', 'error');
                     }}
@@ -997,6 +1194,64 @@ def dashboard():
                 .catch(error => {{
                     showMessage('서버 오류가 발생했습니다.', 'error');
                 }});
+            }}
+            
+            // 라벨링 기록 조회
+            function viewLabelHistory(fileId) {{
+                fetch(`/api/label/history/${{fileId}}`)
+                .then(response => response.json())
+                .then(data => {{
+                    if (data.success) {{
+                        if (data.has_history) {{
+                            displayLabelHistory(data.label);
+                        }} else {{
+                            displayNoHistory(data.message);
+                        }}
+                        document.getElementById('historyModal').style.display = 'block';
+                    }} else {{
+                        showMessage(data.error || '기록 조회 실패', 'error');
+                    }}
+                }})
+                .catch(error => {{
+                    showMessage('서버 오류가 발생했습니다.', 'error');
+                }});
+            }}
+            
+            // 라벨링 기록 표시
+            function displayLabelHistory(label) {{
+                const content = document.getElementById('historyContent');
+                content.innerHTML = `
+                    <div class="history-item">
+                        <h3>✅ 라벨링 기록이 있습니다</h3>
+                        <div class="history-details">
+                            <p><strong>질환:</strong> ${{label.disease}}</p>
+                            <p><strong>사진 종류:</strong> ${{label.view_type}}</p>
+                            <p><strong>번호:</strong> ${{label.code}}</p>
+                            <p><strong>최종 소견:</strong></p>
+                            <div class="description-box">
+                                ${{label.description.replace(/\\n/g, '<br>')}}
+                            </div>
+                            <p><strong>라벨링 시간:</strong> ${{label.created_at}}</p>
+                        </div>
+                    </div>
+                `;
+            }}
+            
+            // 기록 없음 표시
+            function displayNoHistory(message) {{
+                const content = document.getElementById('historyContent');
+                content.innerHTML = `
+                    <div class="history-item">
+                        <h3>❌ 라벨링 기록이 없습니다</h3>
+                        <p>${{message}}</p>
+                        <p>이 파일에 대해 아직 라벨링을 하지 않았습니다.</p>
+                    </div>
+                `;
+            }}
+            
+            // 기록 모달 닫기
+            function closeHistoryModal() {{
+                document.getElementById('historyModal').style.display = 'none';
             }}
             
 

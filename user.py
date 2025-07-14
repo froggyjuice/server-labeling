@@ -38,6 +38,8 @@ class File(db.Model):
     
     # 관계 설정 (관계는 데이터베이스에서 테이블 간의 연결을 의미합니다)
     user = db.relationship('User', backref=db.backref('files', lazy=True))
+    # cascade delete 설정: 파일이 삭제되면 관련된 라벨들도 자동 삭제
+    labels = db.relationship('Label', backref='file', lazy=True, cascade='all, delete-orphan')
 
     def __repr__(self):
         return f'<File {self.filename}>'
@@ -54,7 +56,7 @@ class File(db.Model):
 class Label(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    file_id = db.Column(db.Integer, db.ForeignKey('file.id'), nullable=False)
+    file_id = db.Column(db.Integer, db.ForeignKey('file.id', ondelete='CASCADE'), nullable=False)
     disease = db.Column(db.String(100), nullable=False)         # 질환
     view_type = db.Column(db.String(20), nullable=False)        # 사진 종류 (AP, LATDEQ, LAT, PA)
     code = db.Column(db.String(20), nullable=False)             # 번호 (예: RDS_1, BPD_1)
@@ -63,7 +65,6 @@ class Label(db.Model):
 
     # 관계 설정
     user = db.relationship('User', backref=db.backref('labels', lazy=True))
-    file = db.relationship('File', backref=db.backref('labels', lazy=True))
 
     def __repr__(self):
         return f'<Label {self.user.username} -> {self.file.filename}: {self.disease}/{self.code}>'
