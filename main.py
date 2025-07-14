@@ -77,6 +77,9 @@ def init_database():
             
         except Exception as e:
             print(f"❌ 데이터베이스 초기화 중 오류: {e}")
+            print(f"오류 타입: {type(e).__name__}")
+            import traceback
+            print(f"상세 오류: {traceback.format_exc()}")
             print("데이터베이스 권한 문제가 발생했습니다.")
             print("SSH 환경에서 데이터베이스 파일 권한을 확인하세요.")
 
@@ -156,6 +159,10 @@ def register():
         
     except Exception as e:
         db.session.rollback()  # 오류 발생 시 변경사항 되돌리기
+        print(f"❌ 회원가입 오류: {e}")
+        print(f"오류 타입: {type(e).__name__}")
+        import traceback
+        print(f"상세 오류: {traceback.format_exc()}")
         return jsonify({'success': False, 'error': '서버 오류가 발생했습니다.'}), 500
 
 # 로그인 API 엔드포인트
