@@ -22,7 +22,7 @@ from sqlalchemy import inspect
 project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))
 
-from user import db, User, File, Label
+from user import db, User, File, Label, ensure_database_permissions
 
 # ==================== 환경 설정 ====================
 
@@ -87,7 +87,30 @@ def restore_backup(backup_filename):
 # ==================== 데이터베이스 관리 기능 ====================
 def connect_database():
     db_path = os.path.join(os.path.dirname(__file__), DB_PATH)
-    return sqlite3.connect(db_path)
+    # SSH 환경에서 데이터베이스 권한 문제 해결
+    try:
+        # 데이터베이스 파일이 존재하는지 확인
+        if os.path.exists(db_path):
+            # 파일 권한 확인 및 수정
+            import stat
+            current_permissions = os.stat(db_path).st_mode
+            if not (current_permissions & stat.S_IWRITE):
+                # 쓰기 권한이 없으면 추가
+                os.chmod(db_path, current_permissions | stat.S_IWRITE)
+                print(f"✅ 데이터베이스 파일 권한 수정: {db_path}")
+        
+        # 데이터베이스 디렉토리 권한 확인
+        db_dir = os.path.dirname(db_path)
+        if not os.path.exists(db_dir):
+            os.makedirs(db_dir, mode=0o755)
+            print(f"✅ 데이터베이스 디렉토리 생성: {db_dir}")
+        
+        return sqlite3.connect(db_path)
+    except Exception as e:
+        print(f"❌ 데이터베이스 연결 오류: {e}")
+        # 대체 방법: 메모리 데이터베이스 사용
+        print("⚠️ 메모리 데이터베이스를 사용합니다.")
+        return sqlite3.connect(':memory:')
 
 def create_database_with_cascade():
     """CASCADE DELETE를 지원하는 새로운 데이터베이스 생성"""
@@ -191,6 +214,13 @@ def add_sample_user():
 def upload_files_from_folder(folder_path):
     """지정된 폴더의 파일들을 데이터베이스에 업로드 (하위 폴더 재귀 처리, DICOM 변환 포함)"""
     with app.app_context():
+        # SSH 환경에서 데이터베이스 권한 문제 해결
+        try:
+            # 데이터베이스 권한 확인
+            ensure_database_permissions()
+        except Exception as e:
+            print(f"⚠️ 데이터베이스 권한 확인 중 오류: {e}")
+        
         # admin 사용자 찾기 (없으면 생성)
         admin_user = add_sample_user()
         
@@ -201,7 +231,7 @@ def upload_files_from_folder(folder_path):
         
         # 업로드 폴더가 없으면 생성
         if not os.path.exists(UPLOAD_FOLDER_PATH):
-            os.makedirs(UPLOAD_FOLDER_PATH)
+            os.makedirs(UPLOAD_FOLDER_PATH, mode=0o755)
             print(f"✅ 업로드 폴더를 생성했습니다: {UPLOAD_FOLDER_PATH}")
         
         # 폴더 내 파일들 처리
@@ -519,9 +549,143 @@ def export_selected_data(data_type):
             print(f"❌ Excel 내보내기 중 오류 발생: {e}")
             return False
 
-# ==================== SQLite 뷰어 기능 ====================
+# ==================== 데이터베이스 뷰어 기능 ====================
+def open_console_database_viewer():
+    """콘솔 기반 데이터베이스 뷰어"""
+    print("\n" + "="*60)
+    print("📊 콘솔 기반 데이터베이스 뷰어")
+    print("="*60)
+    
+    while True:
+        print("\n📋 메뉴:")
+        print("1. 사용자 목록 보기")
+        print("2. 파일 목록 보기")
+        print("3. 라벨링 정보 보기")
+        print("4. 데이터베이스 통계")
+        print("5. 모든 데이터 새로고침")
+        print("0. 종료")
+        
+        choice = input("\n선택하세요 (0-5): ").strip()
+        
+        if choice == '0':
+            print("뷰어를 종료합니다.")
+            break
+        elif choice == '1':
+            view_all_users()
+        elif choice == '2':
+            view_all_files()
+        elif choice == '3':
+            view_all_labels()
+        elif choice == '4':
+            show_database_stats()
+        elif choice == '5':
+            refresh_all_data()
+        else:
+            print("❌ 잘못된 선택입니다.")
+
+def view_all_labels():
+    """모든 라벨링 정보 조회"""
+    conn = connect_database()
+    cursor = conn.cursor()
+    
+    print("\n=== 모든 라벨링 정보 ===")
+    try:
+        cursor.execute("""
+            SELECT l.id, u.username, f.filename, l.disease, l.view_type, l.code, l.description, l.created_at
+            FROM label l
+            JOIN user u ON l.user_id = u.id
+            JOIN file f ON l.file_id = f.id
+            ORDER BY l.created_at DESC
+        """)
+        labels = cursor.fetchall()
+        if labels:
+            print(f"{'ID':<4} {'사용자':<10} {'파일명':<20} {'질환':<15} {'사진종류':<8} {'번호':<8} {'설명':<30} {'생성일':<20}")
+            print("-" * 120)
+            for label in labels:
+                print(f"{label[0]:<4} {label[1]:<10} {label[2]:<20} {label[3]:<15} {label[4]:<8} {label[5]:<8} {label[6]:<30} {label[7]:<20}")
+        else:
+            print("라벨링 정보가 없습니다.")
+    except sqlite3.OperationalError as e:
+        if "no such table" in str(e):
+            print("❌ 라벨 테이블이 존재하지 않습니다.")
+        else:
+            print(f"❌ 데이터베이스 오류: {e}")
+    except Exception as e:
+        print(f"❌ 오류 발생: {e}")
+    finally:
+        conn.close()
+
+def show_database_stats():
+    """데이터베이스 통계 정보"""
+    conn = connect_database()
+    cursor = conn.cursor()
+    
+    print("\n=== 데이터베이스 통계 ===")
+    try:
+        # 사용자 수
+        cursor.execute("SELECT COUNT(*) FROM user")
+        user_count = cursor.fetchone()[0]
+        
+        # 파일 수
+        cursor.execute("SELECT COUNT(*) FROM file")
+        file_count = cursor.fetchone()[0]
+        
+        # 라벨 수
+        cursor.execute("SELECT COUNT(*) FROM label")
+        label_count = cursor.fetchone()[0]
+        
+        # 파일 크기 합계
+        cursor.execute("SELECT SUM(file_size) FROM file")
+        total_size = cursor.fetchone()[0] or 0
+        
+        print(f"👥 사용자 수: {user_count}명")
+        print(f"📁 파일 수: {file_count}개")
+        print(f"🏷️ 라벨 수: {label_count}개")
+        print(f"💾 총 파일 크기: {total_size/1024/1024:.2f}MB")
+        
+    except sqlite3.OperationalError as e:
+        print(f"❌ 데이터베이스 오류: {e}")
+    except Exception as e:
+        print(f"❌ 오류 발생: {e}")
+    finally:
+        conn.close()
+
+def refresh_all_data():
+    """모든 데이터 새로고침"""
+    print("🔄 데이터를 새로고침합니다...")
+    view_all_users()
+    view_all_files()
+    view_all_labels()
+    show_database_stats()
+    print("✅ 데이터 새로고침 완료")
+
 def open_database_viewer():
-    """SQLite 데이터베이스 뷰어 GUI 열기"""
+    """데이터베이스 뷰어 실행 (GUI 또는 콘솔)"""
+    # SSH 환경에서 GUI 사용 불가능한 경우 처리
+    try:
+        # DISPLAY 환경변수 확인
+        if not os.environ.get('DISPLAY'):
+            print("ℹ️ SSH 환경에서 GUI를 사용할 수 없습니다.")
+            print("콘솔 기반 뷰어를 실행합니다.")
+            open_console_database_viewer()
+            return True
+        
+        # tkinter 초기화 테스트
+        import tkinter as tk
+        test_root = tk.Tk()
+        test_root.destroy()
+        
+        # GUI 뷰어 실행
+        return open_gui_database_viewer()
+        
+    except Exception as e:
+        print(f"ℹ️ GUI 환경 초기화 실패: {e}")
+        print("콘솔 기반 뷰어를 실행합니다.")
+        open_console_database_viewer()
+        return True
+
+def open_gui_database_viewer():
+    """GUI 기반 데이터베이스 뷰어"""
     try:
         import tkinter as tk
         from tkinter import ttk, messagebox
@@ -731,10 +895,16 @@ def open_database_viewer():
             messagebox.showinfo("완료", "데이터가 새로고침되었습니다.")
 
     # GUI 실행
-    root = tk.Tk()
-    app = DatabaseViewer(root)
-    root.mainloop()
-    return True
+    try:
+        root = tk.Tk()
+        app = DatabaseViewer(root)
+        root.mainloop()
+        return True
+    except Exception as e:
+        print(f"❌ GUI 실행 실패: {e}")
+        print("SSH 환경에서는 GUI 뷰어를 사용할 수 없습니다.")
+        print("대신 콘솔 기반 데이터베이스 뷰어를 사용하세요.")
+        return False
 
 # ==================== 파일 삭제 기능 ====================
 def delete_file_by_id(file_id):
@@ -912,7 +1082,7 @@ def main():
         print("7. 무결성 검증")
         print("8. Excel로 전체 데이터 내보내기")
         print("9. Excel로 선택 데이터 내보내기")
-        print("10. SQLite 뷰어 열기")
+        print("10. SQLite 뷰어 열기 (GUI/콘솔)")
         print("11. 파일 삭제")
         print("12. CASCADE DELETE 지원 DB 생성")
         print("13. 종료")

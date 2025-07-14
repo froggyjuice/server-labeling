@@ -1,8 +1,35 @@
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, timezone, timedelta
+import os
+import stat
 
 db = SQLAlchemy()
+
+def ensure_database_permissions():
+    """SSH 환경에서 데이터베이스 권한 문제 해결"""
+    try:
+        # 데이터베이스 파일 경로 (main.py에서 설정된 경로와 동일)
+        db_path = os.path.join(os.path.dirname(__file__), 'database', 'app.db')
+        db_dir = os.path.dirname(db_path)
+        
+        # 데이터베이스 디렉토리가 없으면 생성
+        if not os.path.exists(db_dir):
+            os.makedirs(db_dir, mode=0o755)
+            print(f"✅ 데이터베이스 디렉토리 생성: {db_dir}")
+        
+        # 데이터베이스 파일이 존재하면 권한 확인
+        if os.path.exists(db_path):
+            current_permissions = os.stat(db_path).st_mode
+            if not (current_permissions & stat.S_IWRITE):
+                # 쓰기 권한이 없으면 추가
+                os.chmod(db_path, current_permissions | stat.S_IWRITE)
+                print(f"✅ 데이터베이스 파일 권한 수정: {db_path}")
+                
+    except Exception as e:
+        print(f"⚠️ 데이터베이스 권한 확인 중 오류: {e}")
+        # 오류가 발생해도 계속 진행
+        pass
 
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)

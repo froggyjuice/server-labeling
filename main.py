@@ -4,7 +4,7 @@ from datetime import datetime, timezone, timedelta
 
 from flask import Flask, send_from_directory, request, jsonify, session, redirect, url_for, send_file
 from flask_cors import CORS
-from user import db, User, File, Label
+from user import db, User, File, Label, ensure_database_permissions
 from werkzeug.utils import secure_filename
 from sqlalchemy import inspect
 
@@ -36,39 +36,49 @@ def allowed_file(filename):
 def init_database():
     """데이터베이스 초기화 및 마이그레이션"""
     with app.app_context():
-        # 데이터베이스 엔진 생성
-        engine = db.engine
-        
-        # 기존 테이블 확인
-        inspector = inspect(engine)
-        existing_tables = inspector.get_table_names()
-        
-        print(f"기존 테이블: {existing_tables}")
-        
-        # 필요한 테이블 목록
-        required_tables = ['user', 'file', 'label']
-        
-        # 누락된 테이블 확인
-        missing_tables = [table for table in required_tables if table not in existing_tables]
-        
-        if missing_tables:
-            print(f"누락된 테이블: {missing_tables}")
-            print("테이블을 생성합니다...")
-            db.create_all()
-            print("모든 테이블이 생성되었습니다.")
-        else:
-            print("모든 필요한 테이블이 존재합니다.")
+        # SSH 환경에서 데이터베이스 권한 문제 해결
+        try:
+            # 데이터베이스 권한 확인
+            ensure_database_permissions()
             
-            # 기존 테이블 구조 확인
-            for table_name in required_tables:
-                if table_name in existing_tables:
-                    columns = inspector.get_columns(table_name)
-                    print(f"\n{table_name} 테이블 구조:")
-                    for column in columns:
-                        print(f"  - {column['name']}: {column['type']}")
-        
-        # 샘플 데이터 추가 (선택사항)
-        add_sample_data()
+            # 데이터베이스 엔진 생성
+            engine = db.engine
+            
+            # 기존 테이블 확인
+            inspector = inspect(engine)
+            existing_tables = inspector.get_table_names()
+            
+            print(f"기존 테이블: {existing_tables}")
+            
+            # 필요한 테이블 목록
+            required_tables = ['user', 'file', 'label']
+            
+            # 누락된 테이블 확인
+            missing_tables = [table for table in required_tables if table not in existing_tables]
+            
+            if missing_tables:
+                print(f"누락된 테이블: {missing_tables}")
+                print("테이블을 생성합니다...")
+                db.create_all()
+                print("모든 테이블이 생성되었습니다.")
+            else:
+                print("모든 필요한 테이블이 존재합니다.")
+                
+                # 기존 테이블 구조 확인
+                for table_name in required_tables:
+                    if table_name in existing_tables:
+                        columns = inspector.get_columns(table_name)
+                        print(f"\n{table_name} 테이블 구조:")
+                        for column in columns:
+                            print(f"  - {column['name']}: {column['type']}")
+            
+            # 샘플 데이터 추가 (선택사항)
+            add_sample_data()
+            
+        except Exception as e:
+            print(f"❌ 데이터베이스 초기화 중 오류: {e}")
+            print("데이터베이스 권한 문제가 발생했습니다.")
+            print("SSH 환경에서 데이터베이스 파일 권한을 확인하세요.")
 
 def add_sample_data():
     """샘플 데이터 추가 (데이터베이스가 비어있을 때만)"""
