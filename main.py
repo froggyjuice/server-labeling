@@ -379,20 +379,20 @@ def add_label():
         code = data['code']
         description = data['description']
         
-        # 질환 유효성 검사
-        valid_diseases = [
-            'Respiratory Distress Syndrome', 'Bronchopulmonary Dysplasia', 
-            'Pneumothorax', 'Pulmonary Interstitial Emphysema', 
-            'Pneumomediastinum', 'Subcutaneous Emphysema', 
-            'Pneumopericardium', 'Necrotizing Enterocolitis'
-        ]
-        if disease not in valid_diseases:
-            return jsonify({'success': False, 'error': '올바르지 않은 질환입니다.'}), 400
-        
-        # 사진 종류 유효성 검사
-        valid_view_types = ['AP', 'LATDEQ', 'LAT', 'PA']
-        if view_type not in valid_view_types:
-            return jsonify({'success': False, 'error': '올바르지 않은 사진 종류입니다.'}), 400
+        # # 질환 유효성 검사
+        # valid_diseases = [
+        #     'Respiratory Distress Syndrome', 'Bronchopulmonary Dysplasia', 
+        #     'Pneumothorax', 'Pulmonary Interstitial Emphysema', 
+        #     'Pneumomediastinum', 'Subcutaneous Emphysema', 
+        #     'Pneumopericardium', 'Necrotizing Enterocolitis'
+        # ]
+        # if disease not in valid_diseases:
+        #     return jsonify({'success': False, 'error': '올바르지 않은 질환입니다.'}), 400
+        # 
+        # # 사진 종류 유효성 검사
+        # valid_view_types = ['AP', 'LATDEQ', 'LAT', 'PA']
+        # if view_type not in valid_view_types:
+        #     return jsonify({'success': False, 'error': '올바르지 않은 사진 종류입니다.'}), 400
         
         # 기존 라벨 확인 (업데이트식 구조 유지)
         existing_label = Label.query.filter_by(
