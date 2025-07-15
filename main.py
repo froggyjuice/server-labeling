@@ -208,14 +208,37 @@ def get_current_user():
     return jsonify({'success': False, 'error': '로그인이 필요합니다.'}), 401
 
 
-# 파일 목록 조회 API 엔드포인트 (라벨링 정보 포함)
+# 파일 목록 조회 API 엔드포인트 (페이지네이션 + 지연 로딩 적용)
 @app.route('/api/files', methods=['GET'])
 def get_files():
     user_id = session.get('user_id')
-    files = File.query.all()
+    
+    # 페이지네이션 파라미터
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 20, type=int)  # 한 번에 20개씩
+    tab = request.args.get('tab', 'all')  # 탭 필터링
+    
+    # 기본 쿼리
+    query = File.query
+    
+    # 탭별 필터링
+    if tab == 'completed':
+        # 완료된 파일만 (라벨이 있는 파일)
+        query = query.join(Label, File.id == Label.file_id).filter(Label.user_id == user_id)
+    elif tab == 'incomplete':
+        # 미완료 파일만 (라벨이 없는 파일)
+        subquery = db.session.query(Label.file_id).filter(Label.user_id == user_id).subquery()
+        query = query.filter(~File.id.in_(subquery))
+    
+    # 페이지네이션 적용
+    pagination = query.paginate(
+        page=page, 
+        per_page=per_page, 
+        error_out=False
+    )
     
     files_with_labels = []
-    for file in files:
+    for file in pagination.items:
         file_dict = file.to_dict()
         
         # 현재 사용자의 라벨링 정보 추가
@@ -233,27 +256,22 @@ def get_files():
         else:
             file_dict['user_label'] = None
         
-        # 전체 라벨링 통계 추가 (질환별)
-        disease_stats = {}
-        diseases = [
-            'Respiratory Distress Syndrome', 'Bronchopulmonary Dysplasia', 
-            'Pneumothorax', 'Pulmonary Interstitial Emphysema', 
-            'Pneumomediastinum', 'Subcutaneous Emphysema', 
-            'Pneumopericardium', 'Necrotizing Enterocolitis'
-        ]
-        
-        for disease in diseases:
-            count = Label.query.filter_by(file_id=file.id, disease=disease).count()
-            disease_stats[disease] = count
-        
-        file_dict['disease_stats'] = disease_stats
-        file_dict['total_labels'] = sum(disease_stats.values())
+        # 라벨링 통계는 별도 API로 분리하여 성능 향상
+        file_dict['has_labels'] = Label.query.filter_by(file_id=file.id).count() > 0
         
         files_with_labels.append(file_dict)
     
     return jsonify({
         'success': True,
-        'files': files_with_labels
+        'files': files_with_labels,
+        'pagination': {
+            'page': page,
+            'per_page': per_page,
+            'total': pagination.total,
+            'pages': pagination.pages,
+            'has_next': pagination.has_next,
+            'has_prev': pagination.has_prev
+        }
     }), 200
 
 # 파일 다운로드 API 엔드포인트
@@ -835,6 +853,77 @@ def dashboard():
                 min-height: 200px;
             }}
             
+            /* 페이지네이션 스타일 */
+            .pagination {{
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                gap: 10px;
+                margin-top: 20px;
+                padding: 15px;
+            }}
+            
+            .pagination button {{
+                padding: 8px 16px;
+                border: 1px solid #ddd;
+                background-color: white;
+                color: #333;
+                cursor: pointer;
+                border-radius: 4px;
+                transition: all 0.3s ease;
+            }}
+            
+            .pagination button:hover {{
+                background-color: #f8f9fa;
+                border-color: #007bff;
+            }}
+            
+            .pagination button:disabled {{
+                background-color: #f8f9fa;
+                color: #6c757d;
+                cursor: not-allowed;
+                border-color: #ddd;
+            }}
+            
+            .pagination span {{
+                font-weight: bold;
+                color: #333;
+            }}
+            
+            /* 지연 로딩 이미지 스타일 */
+            .lazy {{
+                opacity: 0;
+                transition: opacity 0.3s ease;
+            }}
+            
+            .lazy.loaded {{
+                opacity: 1;
+            }}
+            
+            /* 로딩 스피너 */
+            .loading {{
+                text-align: center;
+                padding: 20px;
+                color: #666;
+            }}
+            
+            .loading::after {{
+                content: '';
+                display: inline-block;
+                width: 20px;
+                height: 20px;
+                border: 3px solid #f3f3f3;
+                border-top: 3px solid #007bff;
+                border-radius: 50%;
+                animation: spin 1s linear infinite;
+                margin-left: 10px;
+            }}
+            
+            @keyframes spin {{
+                0% {{ transform: rotate(0deg); }}
+                100% {{ transform: rotate(360deg); }}
+            }}
+            
 
         </style>
     </head>
@@ -873,6 +962,7 @@ def dashboard():
                     </div>
                     <div class="tab-content">
                         <div id="fileList">로딩 중...</div>
+                        <div id="pagination" class="pagination"></div>
                     </div>
                 </div>
             </div>
@@ -954,25 +1044,47 @@ def dashboard():
         </div>
         
         <script>
-            // 파일 목록 로드
-            function loadFiles() {{
-                fetch('/api/files')
+            // 전역 변수
+            let currentFileId = null;
+            let allFiles = [];
+            let currentTab = 'all';
+            let currentPage = 1;
+            let currentPagination = null;
+            
+            // 파일 목록 로드 (페이지네이션 적용)
+            function loadFiles(page = 1) {{
+                currentPage = page;
+                const perPage = 20;
+                const tab = currentTab;
+                
+                // 로딩 표시
+                document.getElementById('fileList').innerHTML = '<div class="loading">파일 목록을 불러오는 중...</div>';
+                
+                fetch(`/api/files?page=${{page}}&per_page=${{perPage}}&tab=${{tab}}`)
                 .then(response => response.json())
                 .then(data => {{
                     if (data.success) {{
                         allFiles = data.files;
-                        displayFilesByTab();
-                        updateStats(allFiles);
+                        currentPagination = data.pagination;
+                        
+                        displayFiles(allFiles);
+                        updateStats(data.pagination);
+                        updatePagination(data.pagination);
+                        
+                        // 이미지 지연 로딩 적용
+                        lazyLoadImages();
                     }}
                 }})
                 .catch(error => {{
                     console.error('파일 목록 로드 실패:', error);
+                    document.getElementById('fileList').innerHTML = '<p>파일 목록을 불러오는데 실패했습니다.</p>';
                 }});
             }}
             
             // 탭 전환
             function switchTab(tabName) {{
                 currentTab = tabName;
+                currentPage = 1; // 탭 변경 시 첫 페이지로
                 
                 // 탭 버튼 활성화 상태 변경
                 document.querySelectorAll('.tab-btn').forEach(btn => {{
@@ -980,41 +1092,64 @@ def dashboard():
                 }});
                 event.target.classList.add('active');
                 
-                // 파일 목록 필터링 및 표시
-                displayFilesByTab();
-            }}
-            
-            // 탭에 따른 파일 목록 표시
-            function displayFilesByTab() {{
-                let filteredFiles = [];
-                
-                switch(currentTab) {{
-                    case 'all':
-                        filteredFiles = allFiles;
-                        break;
-                    case 'completed':
-                        filteredFiles = allFiles.filter(file => file.user_label);
-                        break;
-                    case 'incomplete':
-                        filteredFiles = allFiles.filter(file => !file.user_label);
-                        break;
-                }}
-                
-                displayFiles(filteredFiles);
+                // 파일 목록 새로 로드
+                loadFiles(1);
             }}
             
             // 통계 업데이트
-            function updateStats(files) {{
-                const totalFiles = files.length;
-                const userLabels = files.filter(file => file.user_label).length;
-                
-                document.getElementById('totalFiles').textContent = totalFiles;
+            function updateStats(pagination) {{
+                document.getElementById('totalFiles').textContent = pagination.total;
+                // 사용자 라벨링 수는 별도 계산 필요
+                const userLabels = allFiles.filter(file => file.user_label).length;
                 document.getElementById('userLabels').textContent = userLabels;
             }}
             
-
+            // 페이지네이션 업데이트
+            function updatePagination(pagination) {{
+                const paginationDiv = document.getElementById('pagination');
+                if (!paginationDiv) return;
+                
+                let html = '';
+                
+                if (pagination.has_prev) {{
+                    html += `<button onclick="loadFiles(${{pagination.page - 1}})" class="btn btn-secondary">이전</button>`;
+                }} else {{
+                    html += `<button disabled class="btn btn-secondary">이전</button>`;
+                }}
+                
+                html += `<span>${{pagination.page}} / ${{pagination.pages}}</span>`;
+                
+                if (pagination.has_next) {{
+                    html += `<button onclick="loadFiles(${{pagination.page + 1}})" class="btn btn-secondary">다음</button>`;
+                }} else {{
+                    html += `<button disabled class="btn btn-secondary">다음</button>`;
+                }}
+                
+                paginationDiv.innerHTML = html;
+            }}
             
-            // 파일 목록 표시
+            // 이미지 지연 로딩
+            function lazyLoadImages() {{
+                const imageObserver = new IntersectionObserver((entries, observer) => {{
+                    entries.forEach(entry => {{
+                        if (entry.isIntersecting) {{
+                            const img = entry.target;
+                            img.src = img.dataset.src;
+                            img.classList.add('loaded');
+                            observer.unobserve(img);
+                        }}
+                    }});
+                }}, {{
+                    rootMargin: '50px 0px', // 50px 전에 미리 로드
+                    threshold: 0.1
+                }});
+                
+                document.querySelectorAll('img[data-src]').forEach(img => {{
+                    imageObserver.observe(img);
+                }});
+            }}
+            
+            // 파일 목록 표시 (지연 로딩 적용)
             function displayFiles(files) {{
                 const fileList = document.getElementById('fileList');
                 if (files.length === 0) {{
@@ -1028,17 +1163,13 @@ def dashboard():
                                    file.filename.toLowerCase().endsWith('.png') ||
                                    file.filename.toLowerCase().endsWith('.dcm');
                     
-                    // 질환별 라벨링 통계 표시
-                    const diseaseStats = file.disease_stats || {{}};
-                    const totalLabels = file.total_labels || 0;
-                    
                     return `
                         <div class="file-item">
                             <div class="file-info">
                                 <strong>${{file.filename}}</strong><br>
                                 <small>업로드: ${{file.uploaded_by}} | 크기: ${{(file.file_size / 1024).toFixed(1)}}KB</small><br>
                                 <small>라벨링 기록: ${{file.user_label ? '✅' : '✖️'}}</small>
-                                ${{isImage ? `<br><img src="/api/files/${{file.id}}/image" style="max-width: 200px; max-height: 150px; margin-top: 10px; border-radius: 5px;">` : ''}}
+                                ${{isImage ? `<br><img class="lazy" data-src="/api/files/${{file.id}}/image" style="max-width: 200px; max-height: 150px; margin-top: 10px; border-radius: 5px;" alt="썸네일">` : ''}}
                             </div>
                             <div class="file-actions">
                                 <div class="label-buttons">
@@ -1051,11 +1182,6 @@ def dashboard():
                     `;
                 }}).join('');
             }}
-            
-            // 전역 변수
-            let currentFileId = null;
-            let allFiles = [];
-            let currentTab = 'all';
             
             // 라벨링 모달 열기
             function openLabelingModal(fileId) {{
@@ -1233,11 +1359,7 @@ def dashboard():
                 .then(data => {{
                     if (data.success) {{
                         showMessage(data.message, 'success');
-                        loadFiles(); // 파일 목록 새로고침
-                        // 탭 상태 유지
-                        setTimeout(() => {{
-                            displayFilesByTab();
-                        }}, 100);
+                        loadFiles(currentPage); // 현재 페이지 새로고침
                     }} else {{
                         showMessage(data.error || '라벨링 실패', 'error');
                     }}
@@ -1355,7 +1477,7 @@ def dashboard():
             }}
             
             // 페이지 로드 시 파일 목록 로드
-            loadFiles();
+            loadFiles(1);
         </script>
     </body>
     </html>
