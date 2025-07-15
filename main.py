@@ -218,8 +218,8 @@ def get_files():
     per_page = request.args.get('per_page', 20, type=int)  # 한 번에 20개씩
     tab = request.args.get('tab', 'all')  # 탭 필터링
     
-    # 기본 쿼리
-    query = File.query
+    # 기본 쿼리 (파일명 오름차순 정렬)
+    query = File.query.order_by(File.filename.asc())
     
     # 탭별 필터링
     if tab == 'completed':
