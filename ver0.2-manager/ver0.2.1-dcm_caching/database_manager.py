@@ -212,7 +212,7 @@ def add_sample_user():
 
 # ==================== 파일 업로드 기능 ====================
 def upload_files_from_folder(folder_path):
-    """지정된 폴더의 파일들을 데이터베이스에 업로드 (하위 폴더 재귀 처리, DICOM 변환 포함)"""
+    """지정된 폴더의 파일들을 데이터베이스에 업로드 (DICOM은 원본 경로만 저장, 실시간 변환)"""
     with app.app_context():
         # SSH 환경에서 데이터베이스 권한 문제 해결
         try:
@@ -228,11 +228,6 @@ def upload_files_from_folder(folder_path):
         if not os.path.exists(folder_path):
             print(f"❌ 오류: 폴더 '{folder_path}'가 존재하지 않습니다.")
             return
-        
-        # 업로드 폴더가 없으면 생성
-        if not os.path.exists(UPLOAD_FOLDER_PATH):
-            os.makedirs(UPLOAD_FOLDER_PATH, mode=0o755)
-            print(f"✅ 업로드 폴더를 생성했습니다: {UPLOAD_FOLDER_PATH}")
         
         # 폴더 내 파일들 처리
         allowed_extensions = {'.txt', '.jpg', '.jpeg', '.png', '.dcm'}
@@ -278,62 +273,31 @@ def upload_files_from_folder(folder_path):
                     file_size = os.path.getsize(file_path)
                     
                     if file_ext == '.dcm':
-                        # DICOM 파일: PNG로 변환하여 환경별 uploads에 캐싱
-                        import pydicom
-                        from PIL import Image
-                        import numpy as np
+                        # DICOM 파일: 원본 경로만 데이터베이스에 저장 (PNG 변환 안함)
+                        print(f"  📋 DICOM 파일 등록: {filename} (실시간 변환 방식)")
                         
-                        # PNG 파일명 생성 (폴더 구조 유지)
-                        png_filename = os.path.splitext(db_filename)[0] + '.png'
-                        png_path = os.path.join(UPLOAD_FOLDER_PATH, png_filename)
-                        
-                        # 업로드 폴더에 하위 폴더 구조 생성
-                        png_dir = os.path.dirname(png_path)
-                        if png_dir != UPLOAD_FOLDER_PATH and not os.path.exists(png_dir):
-                            os.makedirs(png_dir)
-                        
-                        # 이미 변환된 PNG가 있는지 확인
-                        if not os.path.exists(png_path):
-                            # DICOM 파일 읽기 및 PNG 변환
+                        # DICOM 파일 유효성 검사 (선택사항)
+                        try:
+                            import pydicom
                             ds = pydicom.dcmread(file_path)
-                            arr = ds.pixel_array
-                            
-                            # Normalize to 0-255 for display
-                            arr = arr.astype(float)
-                            arr = (arr - arr.min()) / (arr.max() - arr.min()) * 255.0
-                            arr = arr.astype(np.uint8)
-                            
-                            if arr.ndim == 2:
-                                img = Image.fromarray(arr)
-                            else:
-                                img = Image.fromarray(arr[0])
-                            
-                            # PNG로 저장
-                            img.save(png_path, format='PNG')
-                            print(f"  🔄 변환됨: {filename} -> {png_filename}")
-                        else:
-                            print(f"  📋 캐시 사용: {png_filename} (이미 변환됨)")
-                        
-                        # 데이터베이스에 PNG 파일 정보가 이미 있는지 확인
-                        existing_png = File.query.filter_by(filename=png_filename).first()
-                        if existing_png:
-                            print(f"  ⚠️  건너뜀: {png_filename} (이미 데이터베이스에 존재)")
+                            print(f"    ✅ DICOM 파일 유효성 확인됨")
+                        except Exception as dicom_error:
+                            print(f"    ❌ DICOM 파일 오류: {dicom_error}")
                             skipped_count += 1
                             continue
                         
-                        # 데이터베이스에 PNG 파일 정보 저장
-                        png_size = os.path.getsize(png_path)
+                        # 데이터베이스에 원본 DICOM 파일 정보 저장
                         new_file = File(
-                            filename=png_filename,
-                            file_path=png_path,
-                            file_size=png_size,
+                            filename=db_filename,
+                            file_path=file_path,  # 원본 DICOM 경로 저장
+                            file_size=file_size,
                             uploaded_by=admin_user.id
                         )
                         
                         db.session.add(new_file)
                         db.session.commit()
                         
-                        print(f"  ✅ 등록됨: {png_filename} (DICOM 변환)")
+                        print(f"  ✅ 등록됨: {db_filename} (DICOM 원본 - 실시간 변환)")
                         uploaded_count += 1
                         
                     else:
@@ -359,6 +323,7 @@ def upload_files_from_folder(folder_path):
         print(f"   ✅ 성공: {uploaded_count}개 파일")
         print(f"   ⚠️  건너뜀: {skipped_count}개 파일")
         print(f"   📁 총 처리: {uploaded_count + skipped_count}개 파일")
+        print(f"\n💾 디스크 절약: DICOM 파일들은 원본만 저장, PNG 변환은 실시간으로 처리됩니다.")
 
 # ==================== 데이터베이스 무결성 검증 ====================
 def verify_database_integrity():
