@@ -980,6 +980,7 @@ def dashboard():
                         <label for="diseaseSelect">질환 선택:</label>
                         <select id="diseaseSelect" onchange="updateSymptoms()">
                             <option value="">질환을 선택하세요</option>
+                            <option value="정상">정상</option>
                             <option value="Respiratory Distress Syndrome">Respiratory Distress Syndrome</option>
                             <option value="Bronchopulmonary Dysplasia">Bronchopulmonary Dysplasia</option>
                             <option value="Pneumothorax">Pneumothorax</option>
@@ -1219,6 +1220,15 @@ def dashboard():
                     return;
                 }}
                 
+                if (disease === '정상') {{
+                    container.innerHTML = '<p>정상 소견입니다.</p>';
+                    codeInput.readOnly = true;
+                    codeInput.value = 'NORMAL';
+                    descriptionInput.readOnly = true;
+                    descriptionInput.value = '정상';
+                    return;
+                }}
+                
                 if (disease === '직접 입력') {{
                     container.innerHTML = '<p>소견을 직접 입력해주세요.</p>';
                     codeInput.readOnly = true;
@@ -1299,8 +1309,8 @@ def dashboard():
             function updateCodeAndDescription() {{
                 const disease = document.getElementById('diseaseSelect').value;
                 
-                // 직접 입력인 경우 처리하지 않음
-                if (disease === '직접 입력') {{
+                // 정상 또는 직접 입력인 경우 처리하지 않음
+                if (disease === '정상' || disease === '직접 입력') {{
                     return;
                 }}
                 
@@ -1330,8 +1340,8 @@ def dashboard():
                     return;
                 }}
                 
-                // 직접 입력이 아닌 경우에만 코드 검증
-                if (disease !== '직접 입력' && !code) {{
+                // 정상이거나 직접 입력이 아닌 경우에만 코드 검증
+                if (disease !== '정상' && disease !== '직접 입력' && !code) {{
                     showMessage('소견을 선택해주세요.', 'error');
                     return;
                 }}
