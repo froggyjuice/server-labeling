@@ -208,6 +208,7 @@ def get_current_user():
     return jsonify({'success': False, 'error': '로그인이 필요합니다.'}), 401
 
 
+
 # 파일 목록 조회 API 엔드포인트 (라벨링 정보 포함)
 @app.route('/api/files', methods=['GET'])
 def get_files():
@@ -289,56 +290,22 @@ def get_file_content(file_id):
     except Exception as e:
         return jsonify({'success': False, 'error': '파일을 읽을 수 없습니다.'}), 500
 
-# 이미지 파일 표시 API 엔드포인트 (실시간 DICOM 변환)
+# 이미지 파일 표시 API 엔드포인트
 @app.route('/api/files/<int:file_id>/image', methods=['GET'])
 def get_image(file_id):
     file = File.query.get_or_404(file_id)
     try:
-        # DICOM 파일인지 확인
-        if file.filename.lower().endswith('.dcm'):
-            # 실시간 DICOM → PNG 변환
-            import pydicom
-            from PIL import Image
-            import numpy as np
-            import io
-            
-            # DICOM 파일 읽기
-            ds = pydicom.dcmread(file.file_path)
-            arr = ds.pixel_array
-            
-            # 정규화 (0-255 범위로)
-            arr = arr.astype(float)
-            arr = (arr - arr.min()) / (arr.max() - arr.min()) * 255.0
-            arr = arr.astype(np.uint8)
-            
-            # 2D 배열로 변환 (3D인 경우 첫 번째 슬라이스 사용)
-            if arr.ndim == 2:
-                img = Image.fromarray(arr)
-            else:
-                img = Image.fromarray(arr[0])
-            
-            # 메모리에서 PNG로 변환
-            img_io = io.BytesIO()
-            img.save(img_io, 'PNG')
-            img_io.seek(0)
-            
-            # PNG 데이터를 브라우저로 전송 (파일 저장 안함)
-            return send_file(img_io, mimetype='image/png')
-            
+        # 파일 확장자에 따라 MIME 타입 결정
+        filename_lower = file.filename.lower()
+        if filename_lower.endswith('.png'):
+            mimetype = 'image/png'
+        elif filename_lower.endswith(('.jpg', '.jpeg')):
+            mimetype = 'image/jpeg'
         else:
-            # 일반 이미지 파일 (PNG, JPG 등)
-            filename_lower = file.filename.lower()
-            if filename_lower.endswith('.png'):
-                mimetype = 'image/png'
-            elif filename_lower.endswith(('.jpg', '.jpeg')):
-                mimetype = 'image/jpeg'
-            else:
-                mimetype = 'image/jpeg'  # 기본값
-            
-            return send_file(file.file_path, mimetype=mimetype)
-            
+            mimetype = 'image/jpeg'  # 기본값
+        
+        return send_file(file.file_path, mimetype=mimetype)
     except Exception as e:
-        print(f"❌ 이미지 처리 오류: {e}")
         return jsonify({'success': False, 'error': '이미지를 불러올 수 없습니다.'}), 500
 
 # 라벨링 API 엔드포인트
@@ -1025,8 +992,7 @@ def dashboard():
                 fileList.innerHTML = files.map(file => {{
                     const isImage = file.filename.toLowerCase().endsWith('.jpg') || 
                                    file.filename.toLowerCase().endsWith('.jpeg') || 
-                                   file.filename.toLowerCase().endsWith('.png') ||
-                                   file.filename.toLowerCase().endsWith('.dcm');
+                                   file.filename.toLowerCase().endsWith('.png');
                     
                     // 질환별 라벨링 통계 표시
                     const diseaseStats = file.disease_stats || {{}};
