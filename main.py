@@ -529,6 +529,121 @@ def get_label_stats():
     except Exception as e:
         return jsonify({'success': False, 'error': '서버 오류가 발생했습니다.'}), 500
 
+# 라벨링 방법 도움말 API 엔드포인트
+@app.route('/api/help', methods=['GET'])
+def get_help():
+    try:
+        help_content = {
+            'success': True,
+            'help': {
+                'system_intro': {
+                    'title': '신생아 주요 질환 X-ray 소견 라벨링 시스템이란?',
+                    'content': '''
+                    신생아 질환 진단은 임상 소견, 증상, 그리고 X-ray 소견을 종합적으로 고려해야 합니다. 하지만 기존 인공지능 진단 소프트웨어는 X-ray 영상 단독 진단에 치우쳐 명확한 근거 제시가 어렵다는 한계가 있습니다.
+
+                    이러한 한계를 극복하기 위해, 본 라벨링 시스템은 전문의가 X-ray 영상에서만 파악 가능한 특징적인 소견을 중심으로 신생아 주요 질환을 1차적으로 분류하고자 합니다.
+
+                    궁극적인 목표는 이 X-ray 소견들을 기반으로 질병을 예측하고, 의료 기록 작성을 돕는 보조 도구를 개발하는 것입니다.
+
+                    본 시스템에서 다루는 신생아 주요 질환과 각 질환별 X-ray 영상에서 관찰되는 고유한 패턴(X-ray 영상의 특징 여부만 체크)은 다음과 같습니다.
+
+                    1. 신생아 호흡 곤란 증후군 (RDS: Respiratory Distress Syndrome)
+                    RDS_1: 폐 용적 감소 (Hypoventilation)
+                    RDS_2: 폐포 허탈로 인한 과립성 음영 (ground glass appearance)
+                    RDS_3: Air-bronchogram (기관지 내 음영)
+                    RDS_4: 폐 전체 white-out 양상, 심장 경계 불분명
+
+                    2. 기관지폐이형성증 (BPD: Bronchopulmonary Dysplasia)
+                    BPD_1: 미만성 음영 증가
+                    BPD_2: 폐 용적 정상 또는 감소
+                    BPD_3: 전반적 폐 과팽창
+                    BPD_4: 무기폐와 과투과성 부위 혼재
+
+                    3. 기흉 (Pneumothorax)
+                    PTX_1: 종격동의 반대쪽 이동 (Chest AP)
+                    PTX_2: 편평해진 횡격막 (기흉 쪽)
+                    PTX_3: 기흉 쪽 폐의 허탈
+                    PTX_4: Lateral decubitus에서 소기흉 확인 가능
+                    PTX_5: Cross-table lateral: 팬케이크 모양의 공기
+
+                    4. 폐쇄성 간질성 폐기종 (PIE: Pulmonary Interstitial Emphysema)
+                    PIE_1: 낭성 또는 선상의 공기 음영 (국소/양폐)
+
+                    5. 종격동 기종 (Pneumomediastinum)
+                    PMS_1: 흉부 중앙의 공기 음영
+                    PMS_2: 흉선 주위의 공기 → "요트의 돛"(sail sign)
+                    PMS_3: Lateral view에서 명확하게 관찰됨
+
+                    6. 피하기종 (Subcutaneous Emphysema)
+                    STE_1: 피하 조직 내 불규칙한 방사선 투과성 음영이 관찰됩니다.
+
+                    7. 심낭 기종 (Pneumopericardium)
+                    PPC_1: 심장 하부의 공기 음영 (심장 전체를 둘러싸는 공기 음영이 더 특징적일 수 있습니다.)
+
+                    8. 괴사성 장염 (NEC: Necrotizing Enterocolitis)
+                    NEC_1: Ileus (장 마비)
+                    NEC_2: Pneumatosis intestinalis (장벽 내 공기)
+                    NEC_3: Portal 또는 hepatic vein gas
+                    NEC_4: Ascites (복수)
+                    NEC_5: Pneumoperitoneum (복강 내 공기)
+                    '''
+                },
+                'labeling_guide': {
+                    'title': '라벨링 방법 도움말',
+                    'steps': [
+                        {
+                            'step': 1,
+                            'action': '이미지보기',
+                            'description': '이미지를 새 창에서 확인합니다.',
+                            'button_style': 'blue',
+                            'emoji': '🩻'
+                        },
+                        {
+                            'step': 2,
+                            'action': '라벨링',
+                            'description': '라벨링을 위한 팝업창을 엽니다.',
+                            'button_style': 'green',
+                            'emoji': '🏷️',
+                            'sub_steps': [
+                                {
+                                    'title': '질환 선택',
+                                    'description': '질환을 선택하시면 "흉부 X선 소견(복수 선택 가능)"이 나오며, 해당되는 소견을 선택해주시면 됩니다. 만약 X-ray 소견이 없을 경우 "정상"으로 체크해주시면 됩니다.',
+                                    'options': ['정상', 'RDS', 'BPD', 'Pneumothorax', 'PIE', 'Pneumomediastinum', 'Subcutaneous Emphysema', 'Pneumopericardium', 'NEC']
+                                },
+                                {
+                                    'title': '사진 종류',
+                                    'description': '사진의 종류를 선택해주시면 됩니다.',
+                                    'options': ['AP', 'LATDEQ', 'LAT', 'PA']
+                                },
+                                {
+                                    'title': '번호',
+                                    'description': '자동으로 기입됩니다.'
+                                },
+                                {
+                                    'title': '최종 소견',
+                                    'description': '자동으로 기입됩니다.'
+                                }
+                            ]
+                        },
+                        {
+                            'step': 3,
+                            'action': '기록보기',
+                            'description': '이전 라벨링 기록을 확인할 수 있습니다.',
+                            'button_style': 'teal',
+                            'emoji': '📋'
+                        }
+                    ]
+                }
+            }
+        }
+        
+        return jsonify(help_content), 200
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': '서버 오류가 발생했습니다.'}), 500
+
+
+
 # 대시보드 페이지 (로그인 후 리다이렉트될 페이지)
 @app.route('/dashboard')
 def dashboard():
@@ -572,6 +687,26 @@ def dashboard():
                 padding-bottom: 20px;
                 border-bottom: 1px solid #eee;
             }}
+            
+            .header-buttons {{
+                display: flex;
+                gap: 10px;
+                align-items: center;
+            }}
+            
+            .help-btn {{
+                padding: 10px 20px;
+                background-color: #17a2b8;
+                color: white;
+                border: none;
+                border-radius: 5px;
+                cursor: pointer;
+            }}
+            
+            .help-btn:hover {{
+                background-color: #138496;
+            }}
+            
             .logout-btn {{
                 padding: 10px 20px;
                 background-color: #dc3545;
@@ -703,8 +838,10 @@ def dashboard():
                 margin: 5% auto;
                 padding: 0;
                 border-radius: 10px;
-                width: 80%;
-                max-width: 600px;
+                width: 95%;
+                max-width: 700px;
+                max-height: 80vh;
+                overflow-y: auto;
                 box-shadow: 0 4px 20px rgba(0,0,0,0.3);
             }}
             
@@ -734,6 +871,8 @@ def dashboard():
             
             .modal-body {{
                 padding: 20px;
+                max-width: 100%;
+                overflow-x: hidden;
             }}
             
             .form-group {{
@@ -747,6 +886,70 @@ def dashboard():
                 color: #333;
             }}
             
+            /* 흉부 X선 소견 제목 스타일 */
+            .symptom-title {{
+                font-size: 16px;
+                font-weight: bold;
+                margin-bottom: 8px;
+                margin-top: 10px;
+                color: #222;
+            }}
+            
+            .symptom-title .subtitle {{
+                font-size: 12px;
+                font-weight: normal;
+                color: #666;
+            }}
+            
+            .symptoms-table {{
+                width: 100%;
+                border-collapse: collapse;
+                margin-top: 10px;
+            }}
+
+            .symptom-row {{
+                border-bottom: 1px solid #f0f0f0;
+            }}
+
+            .symptom-row:hover {{
+                background-color: #f8f9fa;
+            }}
+
+            .symptom-label {{
+                padding: 8px 12px;
+                text-align: left;
+                vertical-align: middle;
+                width: 85%;
+            }}
+
+            .symptom-label label {{
+                font-size: 13px;
+                color: #333;
+                line-height: 1.4;
+                font-weight: normal;
+                cursor: pointer;
+                display: block;
+            }}
+
+            .symptom-checkbox {{
+                padding: 8px 12px;
+                text-align: center;
+                vertical-align: middle;
+                width: 15%;
+            }}
+
+            .symptom-checkbox input {{
+                width: 16px;
+                height: 16px;
+                margin: 0;
+                cursor: pointer;
+            }}
+            
+            .required {{
+                color: #dc3545;
+                font-weight: bold;
+            }}
+            
             .form-group select,
             .form-group input,
             .form-group textarea {{
@@ -755,6 +958,7 @@ def dashboard():
                 border: 1px solid #ddd;
                 border-radius: 5px;
                 font-size: 14px;
+                box-sizing: border-box;
             }}
             
             .form-group textarea {{
@@ -762,57 +966,22 @@ def dashboard():
                 resize: vertical;
             }}
             
-            .symptom-checkbox {{
-                margin: 5px 0;
-            }}
-            
-            .symptom-checkbox input {{
-                width: auto;
-                margin-right: 10px;
-            }}
-            
             .modal-footer {{
-                padding: 20px;
+                padding: 20px 24px 24px 24px;
                 border-top: 1px solid #eee;
                 text-align: right;
+                display: flex;
+                justify-content: flex-end;
+                gap: 12px;
             }}
             
             .modal-footer button {{
-                margin-left: 10px;
+                margin-left: 0;
             }}
             
             .btn-secondary {{
                 background-color: #6c757d;
                 color: white;
-            }}
-            
-            .history-item {{
-                padding: 20px;
-                background-color: #f8f9fa;
-                border-radius: 8px;
-                margin-bottom: 15px;
-            }}
-            
-            .history-details {{
-                margin-top: 15px;
-            }}
-            
-            .history-details p {{
-                margin: 8px 0;
-                line-height: 1.5;
-            }}
-            
-            .description-box {{
-                background-color: white;
-                border: 1px solid #ddd;
-                border-radius: 5px;
-                padding: 10px;
-                margin: 10px 0;
-                white-space: pre-line;
-                font-family: monospace;
-                font-size: 14px;
-                max-height: 200px;
-                overflow-y: auto;
             }}
             
             /* 탭 스타일 */
@@ -925,44 +1094,285 @@ def dashboard():
             }}
             
 
+            
+            /* 도움말 스타일 */
+            .help-section {{
+                margin-bottom: 30px;
+                padding: 20px;
+                background-color: #f8f9fa;
+                border-radius: 8px;
+                border-left: 4px solid #17a2b8;
+            }}
+            
+            .help-section h3 {{
+                color: #2c3e50;
+                margin-bottom: 15px;
+                font-size: 20px;
+            }}
+            
+            .help-steps {{
+                margin-top: 20px;
+            }}
+            
+            .help-step {{
+                background-color: white;
+                border-radius: 8px;
+                padding: 15px;
+                margin-bottom: 15px;
+                box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+                border-left: 4px solid #28a745;
+            }}
+            
+            .help-step h4 {{
+                color: #2c3e50;
+                margin-bottom: 10px;
+                font-size: 16px;
+            }}
+            
+            .help-step .step-number {{
+                background-color: #28a745;
+                color: white;
+                border-radius: 50%;
+                width: 25px;
+                height: 25px;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                font-weight: bold;
+                margin-right: 10px;
+            }}
+            
+            .help-sub-steps {{
+                margin-top: 15px;
+                padding-left: 20px;
+            }}
+            
+            .help-sub-step {{
+                background-color: #f8f9fa;
+                border-radius: 5px;
+                padding: 10px;
+                margin-bottom: 10px;
+                border-left: 3px solid #17a2b8;
+            }}
+            
+            .help-sub-step h5 {{
+                color: #495057;
+                margin-bottom: 5px;
+                font-size: 14px;
+                font-weight: 600;
+            }}
+            
+            .help-options {{
+                display: flex;
+                flex-wrap: wrap;
+                gap: 5px;
+                margin-top: 5px;
+            }}
+            
+            .help-option {{
+                background-color: #007bff;
+                color: white;
+                padding: 3px 8px;
+                border-radius: 12px;
+                font-size: 12px;
+                font-weight: 500;
+            }}
+            
+            /* 도움말 액션 버튼 스타일 */
+            .help-action-btn {{
+                border: none;
+                border-radius: 4px;
+                padding: 6px 12px;
+                font-size: 12px;
+                font-weight: 500;
+                color: white;
+                cursor: default;
+                margin-left: 10px;
+                display: inline-flex;
+                align-items: center;
+                gap: 4px;
+            }}
+            
+            .help-btn-blue {{
+                background-color: #007bff;
+            }}
+            
+            .help-btn-green {{
+                background-color: #28a745;
+            }}
+            
+            .help-btn-teal {{
+                background-color: #17a2b8;
+            }}
+            
+            .help-btn-default {{
+                background-color: #6c757d;
+            }}
+            
+            /* 도움말 탭 스타일 */
+            .help-tab-buttons {{
+                display: flex;
+                border-bottom: 2px solid #dee2e6;
+                margin-bottom: 20px;
+            }}
+            
+            .help-tab-btn {{
+                padding: 12px 24px;
+                background-color: #f8f9fa;
+                border: none;
+                border-bottom: 3px solid transparent;
+                cursor: pointer;
+                font-size: 14px;
+                font-weight: 500;
+                color: #6c757d;
+                transition: all 0.3s ease;
+                flex: 1;
+            }}
+            
+            .help-tab-btn:hover {{
+                background-color: #e9ecef;
+                color: #495057;
+            }}
+            
+            .help-tab-btn.active {{
+                background-color: #17a2b8;
+                color: white;
+                border-bottom-color: #17a2b8;
+            }}
+            
+            .help-tab-content {{
+                min-height: 400px;
+            }}
+            
+            .help-tab {{
+                display: none;
+            }}
+            
+            .help-tab.active {{
+                display: block;
+            }}
+            
+            .label-btn.image-btn {{
+                background-color: #007bff;
+                color: #fff;
+                border: none;
+                border-radius: 3px;
+                padding: 3px 12px;
+                font-size: 11px;
+                margin-left: 2px;
+                display: inline-flex;
+                align-items: center;
+                gap: 4px;
+                cursor: pointer;
+                transition: background 0.2s;
+            }}
+            .label-btn.image-btn:hover {{
+                background-color: #0056b3;
+            }}
+
+            /* 도움말 개선 스타일 */
+            .help-section {{
+                margin-bottom: 30px;
+                padding: 25px;
+                background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+                border-radius: 12px;
+                border-left: 5px solid #17a2b8;
+                box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+            }}
+
+            .help-section h3 {{ 
+                color: #2c3e50;
+                margin-bottom: 20px;
+                font-size: 24px;
+                font-weight: 700;
+                text-align: center;
+                padding-bottom: 15px;
+                border-bottom: 2px solid #17a2b8;
+            }}
+
+            .help-content {{ 
+                background: white;
+                padding: 20px;
+                border-radius: 8px;
+                line-height: 1.8;
+                font-size: 15px;
+                color: #444;
+                box-shadow: inset 0 2px 8px rgba(0,0,0,0.05);
+            }}
+
+            .disease-list {{
+                background: #f8f9fa;
+                padding: 15px;
+                border-radius: 8px;
+                margin: 15px 0;
+                border-left: 4px solid #28a745;
+            }}
+
+            .disease-item {{
+                margin: 10px 0;
+                padding: 8px 0;
+                border-bottom: 1px solid #dee2e6;
+            }}
+
+            .disease-item:last-child {{
+                border-bottom: none;
+            }}
+
+            .disease-title {{
+                font-weight: 600;
+                color: #2c3e50;
+                margin-bottom: 5px;
+            }}
+
+            .disease-codes {{
+                font-size: 14px;
+                color: #6c757d;
+                margin-left: 15px;
+            }}
+
+
         </style>
     </head>
     <body>
         <div class="container">
             <div class="header">
                 <h1>🏷️ 라벨링 시스템 - 환영합니다, {user.username}님!</h1>
-                <button class="logout-btn" onclick="logout()">로그아웃</button>
+                <div class="header-buttons">
+                    <button class="help-btn" onclick="showHelp()">❓ 도움말</button>
+                    <button class="logout-btn" onclick="logout()">로그아웃</button>
+                </div>
             </div>
             
             <p>이메일: {user.email}</p>
             <p>가입일: {user.created_at.strftime('%Y년 %m월 %d일')}</p>
             
-            <div class="stats">
-                <div class="stat-item">
-                    <div class="stat-number" id="totalFiles">0</div>
-                    <div class="stat-label">총 파일</div>
-                </div>
-                <div class="stat-item">
-                    <div class="stat-number" id="userLabels">0</div>
-                    <div class="stat-label">내 라벨링</div>
-                </div>
-            </div>
-            
-
-            
-            <div id="message"></div>
-            
-            <div class="file-list">
-                <h3>📋 라벨링할 파일 목록</h3>
-                <div class="tab-container">
-                    <div class="tab-buttons">
-                        <button class="tab-btn active" onclick="switchTab('all')">전체</button>
-                        <button class="tab-btn" onclick="switchTab('completed')">완료</button>
-                        <button class="tab-btn" onclick="switchTab('incomplete')">미완료</button>
+            <!-- 라벨링 대시보드 -->
+            <div id="labelingDashboard">
+                <div class="stats">
+                    <div class="stat-item">
+                        <div class="stat-number" id="totalFiles">0</div>
+                        <div class="stat-label">총 파일</div>
                     </div>
-                    <div class="tab-content">
-                        <div id="fileList">로딩 중...</div>
-                        <div id="pagination" class="pagination"></div>
+                    <div class="stat-item">
+                        <div class="stat-number" id="userLabels">0</div>
+                        <div class="stat-label">내 라벨링</div>
+                    </div>
+                </div>
+                
+                <div id="message"></div>
+                
+                <div class="file-list">
+                    <h3>📋 라벨링할 파일 목록</h3>
+                    <div class="tab-container">
+                        <div class="tab-buttons">
+                            <button class="tab-btn active" onclick="switchTab('all')">전체</button>
+                            <button class="tab-btn" onclick="switchTab('completed')">완료</button>
+                            <button class="tab-btn" onclick="switchTab('incomplete')">미완료</button>
+                        </div>
+                        <div class="tab-content">
+                            <div id="fileList">로딩 중...</div>
+                            <div id="pagination" class="pagination"></div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -976,8 +1386,9 @@ def dashboard():
                     <span class="close" onclick="closeLabelingModal()">&times;</span>
                 </div>
                 <div class="modal-body">
+                    <div id="labelingModalMessage" class="message" style="display:none;"></div>
                     <div class="form-group">
-                        <label for="diseaseSelect">질환 선택:</label>
+                        <label for="diseaseSelect">질환 선택: <span class="required">*</span></label>
                         <select id="diseaseSelect" onchange="updateSymptoms()">
                             <option value="">질환을 선택하세요</option>
                             <option value="정상">정상</option>
@@ -994,7 +1405,7 @@ def dashboard():
                     </div>
                     
                     <div class="form-group">
-                        <label for="viewTypeSelect">사진 종류:</label>
+                        <label for="viewTypeSelect">사진 종류: <span class="required">*</span></label>
                         <select id="viewTypeSelect">
                             <option value="">사진 종류를 선택하세요</option>
                             <option value="AP">AP</option>
@@ -1005,7 +1416,7 @@ def dashboard():
                     </div>
                     
                     <div class="form-group">
-                        <label>흉부 X선 소견 (복수 선택 가능):</label>
+                        <label class="symptom-title">흉부 X선 소견 <span class="subtitle">(복수 선택 가능)</span>:</label>
                         <div id="symptomsContainer">
                             <p>질환을 먼저 선택해주세요.</p>
                         </div>
@@ -1040,6 +1451,36 @@ def dashboard():
                 </div>
                 <div class="modal-footer">
                     <button onclick="closeHistoryModal()" class="btn btn-secondary">닫기</button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 도움말 모달 -->
+        <div id="helpModal" class="modal" style="display: none;">
+            <div class="modal-content" style="max-width: 900px; max-height: 80vh; overflow-y: auto;">
+                <div class="modal-header">
+                    <h2>❓ 라벨링 시스템 도움말</h2>
+                    <span class="close" onclick="closeHelpModal()">&times;</span>
+                </div>
+                <div class="modal-body">
+                    <!-- 도움말 탭 버튼 -->
+                    <div class="help-tab-buttons">
+                        <button class="help-tab-btn active" onclick="switchHelpTab('system')">📋 시스템 설명</button>
+                        <button class="help-tab-btn" onclick="switchHelpTab('guide')">📖 라벨링 방법</button>
+                    </div>
+                    
+                    <!-- 도움말 탭 내용 -->
+                    <div class="help-tab-content">
+                        <div id="systemTab" class="help-tab active">
+                            <!-- 시스템 설명 내용 -->
+                        </div>
+                        <div id="guideTab" class="help-tab">
+                            <!-- 라벨링 방법 내용 -->
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button onclick="closeHelpModal()" class="btn btn-secondary">닫기</button>
                 </div>
             </div>
         </div>
@@ -1176,8 +1617,8 @@ def dashboard():
                                 <div class="label-buttons">
                                     <button class="label-btn like-btn" onclick="openLabelingModal(${{file.id}})">🏷️ 라벨링</button>
                                     <button class="label-btn history-btn" onclick="viewLabelHistory(${{file.id}})">📋 기록보기</button>
+                                    ${{isImage ? '<button class=\\"label-btn image-btn\\" onclick=\\"viewContent(' + file.id + ')\\">🩻 이미지보기</button>' : '<button class=\\"btn btn-primary\\" onclick=\\"viewContent(' + file.id + ')\\">📄 내용보기</button>'}}
                                 </div>
-                                <button class="btn btn-primary" onclick="viewContent(${{file.id}})">${{isImage ? '이미지보기' : '내용보기'}}</button>
                             </div>
                         </div>
                     `;
@@ -1240,17 +1681,19 @@ def dashboard():
                 }}
                 
                 const symptoms = getSymptomsByDisease(disease);
-                let html = '';
-                
+                let html = '<table class="symptoms-table">';
+
                 symptoms.forEach(symptom => {{
-                    html += `
-                        <div class="symptom-checkbox">
-                            <input type="checkbox" id="${{symptom.code}}" value="${{symptom.code}}" onchange="updateCodeAndDescription()">
-                            <label for="${{symptom.code}}">${{symptom.description}}</label>
-                        </div>
-                    `;
+                    html += '<tr class="symptom-row">';
+                    html += '<td class="symptom-label">';
+                    html += '<label for="' + symptom.code + '">' + symptom.description + '</label>';
+                    html += '</td>';
+                    html += '<td class="symptom-checkbox">';
+                    html += '<input type="checkbox" id="' + symptom.code + '" value="' + symptom.code + '" onchange="updateCodeAndDescription()">';
+                    html += '</td>';
+                    html += '</tr>';
                 }});
-                
+
                 container.innerHTML = html;
                 codeInput.readOnly = true;
                 descriptionInput.readOnly = true;
@@ -1335,8 +1778,22 @@ def dashboard():
                 const code = document.getElementById('codeInput').value;
                 const description = document.getElementById('descriptionInput').value;
                 
-                if (!disease || !viewType || !description) {{
-                    showMessage('모든 필드를 입력해주세요.', 'error');
+                // 필수 필드 검증
+                if (!disease) {{
+                    showMessage('질환을 선택해주세요.', 'error');
+                    document.getElementById('diseaseSelect').focus();
+                    return;
+                }}
+                
+                if (!viewType) {{
+                    showMessage('사진 종류를 선택해주세요.', 'error');
+                    document.getElementById('viewTypeSelect').focus();
+                    return;
+                }}
+                
+                if (!description) {{
+                    showMessage('최종 소견을 입력해주세요.', 'error');
+                    document.getElementById('descriptionInput').focus();
                     return;
                 }}
                 
@@ -1437,6 +1894,118 @@ def dashboard():
                 document.getElementById('historyModal').style.display = 'none';
             }}
             
+            // 도움말 표시
+            function showHelp() {{
+                fetch('/api/help')
+                .then(response => response.json())
+                .then(data => {{
+                    if (data.success) {{
+                        displayHelp(data.help);
+                        document.getElementById('helpModal').style.display = 'block';
+                    }} else {{
+                        showMessage(data.error || '도움말을 불러올 수 없습니다.', 'error');
+                    }}
+                }})
+                .catch(error => {{
+                    showMessage('서버 오류가 발생했습니다.', 'error');
+                }});
+            }}
+            
+            // 도움말 내용 표시
+            function displayHelp(help) {{
+                // 시스템 설명 탭 내용
+                const systemTab = document.getElementById('systemTab');
+                systemTab.innerHTML = `
+                    <div class="help-section">
+                        <h3>${{help.system_intro.title}}</h3>
+                        <div style="white-space: pre-line; line-height: 1.6; color: #495057;">
+                            ${{help.system_intro.content.replace(/(\d+\.\s+[^\\n]+)/g, '<strong style="color: #2c3e50; font-size: 15px;">$1</strong>')}}
+                        </div>
+                    </div>
+                `;
+                
+                // 라벨링 방법 탭 내용
+                const guideTab = document.getElementById('guideTab');
+                let guideHtml = `
+                    <div class="help-section">
+                        <h3>${{help.labeling_guide.title}}</h3>
+                        <div class="help-steps">
+                `;
+                
+                help.labeling_guide.steps.forEach(step => {{
+                    const buttonClass = step.button_style === 'blue' ? 'help-btn-blue' : 
+                                       step.button_style === 'green' ? 'help-btn-green' : 
+                                       step.button_style === 'teal' ? 'help-btn-teal' : 'help-btn-default';
+                    
+                    guideHtml += `
+                        <div class="help-step">
+                            <h4>
+                                <span class="step-number">${{step.step}}</span>
+                                <button class="help-action-btn ${{buttonClass}}">${{step.emoji}} ${{step.action}}</button>
+                            </h4>
+                            <p>${{step.description}}</p>
+                    `;
+                    
+                    if (step.sub_steps) {{
+                        guideHtml += '<div class="help-sub-steps">';
+                        step.sub_steps.forEach(subStep => {{
+                            guideHtml += `
+                                <div class="help-sub-step">
+                                    <h5>${{subStep.title}}</h5>
+                                    <p>${{subStep.description}}</p>
+                            `;
+                            
+                            if (subStep.options) {{
+                                guideHtml += '<div class="help-options">';
+                                subStep.options.forEach(option => {{
+                                    guideHtml += `<span class="help-option">${{option}}</span>`;
+                                }});
+                                guideHtml += '</div>';
+                            }}
+                            
+                            guideHtml += '</div>';
+                        }});
+                        guideHtml += '</div>';
+                    }}
+                    
+                    guideHtml += '</div>';
+                }});
+                
+                guideHtml += `
+                        </div>
+                    </div>
+                `;
+                
+                guideTab.innerHTML = guideHtml;
+            }}
+            
+            // 도움말 탭 전환
+            function switchHelpTab(tabName) {{
+                // 모든 탭 버튼 비활성화
+                document.querySelectorAll('.help-tab-btn').forEach(btn => {{
+                    btn.classList.remove('active');
+                }});
+                
+                // 모든 탭 내용 숨기기
+                document.querySelectorAll('.help-tab').forEach(tab => {{
+                    tab.classList.remove('active');
+                }});
+                
+                // 선택된 탭 활성화
+                if (tabName === 'system') {{
+                    document.querySelector('.help-tab-btn:first-child').classList.add('active');
+                    document.getElementById('systemTab').classList.add('active');
+                }} else if (tabName === 'guide') {{
+                    document.querySelector('.help-tab-btn:last-child').classList.add('active');
+                    document.getElementById('guideTab').classList.add('active');
+                }}
+            }}
+            
+            // 도움말 모달 닫기
+            function closeHelpModal() {{
+                document.getElementById('helpModal').style.display = 'none';
+            }}
+            
 
             
             // 파일 내용 보기
@@ -1462,13 +2031,27 @@ def dashboard():
             }}
             
             function showMessage(message, type) {{
-                const messageDiv = document.getElementById('message');
-                messageDiv.textContent = message;
-                messageDiv.className = `message ${{type}}`;
-                setTimeout(() => {{
-                    messageDiv.textContent = '';
-                    messageDiv.className = '';
-                }}, 3000);
+                // 라벨링 모달이 열려있으면 모달 내부에 메시지 표시
+                const labelingModal = document.getElementById('labelingModal');
+                const modalMessageDiv = document.getElementById('labelingModalMessage');
+                if (labelingModal && labelingModal.style.display === 'block' && modalMessageDiv) {{
+                    modalMessageDiv.textContent = message;
+                    modalMessageDiv.className = `message ${{type}}`;
+                    modalMessageDiv.style.display = 'block';
+                    setTimeout(() => {{
+                        modalMessageDiv.textContent = '';
+                        modalMessageDiv.className = 'message';
+                        modalMessageDiv.style.display = 'none';
+                    }}, 3000);
+                }} else {{
+                    const messageDiv = document.getElementById('message');
+                    messageDiv.textContent = message;
+                    messageDiv.className = `message ${{type}}`;
+                    setTimeout(() => {{
+                        messageDiv.textContent = '';
+                        messageDiv.className = '';
+                    }}, 3000);
+                }}
             }}
             
             function logout() {{
