@@ -3,6 +3,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, timezone, timedelta
 import os
 import stat
+import json
 
 db = SQLAlchemy()
 
@@ -84,7 +85,7 @@ class Label(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     file_id = db.Column(db.Integer, db.ForeignKey('file.id', ondelete='CASCADE'), nullable=False)
-    disease = db.Column(db.String(100), nullable=False)         # 질환
+    disease = db.Column(db.Text, nullable=False)         # 질환 (JSON 배열 형태로 저장)
     view_type = db.Column(db.String(20), nullable=False)        # 사진 종류 (AP, LATDEQ, LAT, PA)
     code = db.Column(db.String(20), nullable=False)             # 번호 (예: RDS_1, BPD_1)
     description = db.Column(db.String(255), nullable=False)     # 흉부 X선 소견
@@ -93,15 +94,37 @@ class Label(db.Model):
     # 관계 설정
     user = db.relationship('User', backref=db.backref('labels', lazy=True))
 
+    def set_diseases(self, diseases):
+        """질환 리스트를 JSON으로 저장"""
+        if isinstance(diseases, list):
+            self.disease = json.dumps(diseases, ensure_ascii=False)
+        else:
+            self.disease = json.dumps([diseases], ensure_ascii=False)
+
+    def get_diseases(self):
+        """저장된 JSON을 질환 리스트로 반환"""
+        try:
+            return json.loads(self.disease) if self.disease else []
+        except (json.JSONDecodeError, TypeError):
+            # 기존 단일 질환 데이터와의 호환성을 위해
+            return [self.disease] if self.disease else []
+
+    def has_disease(self, disease_name):
+        """특정 질환이 포함되어 있는지 확인"""
+        return disease_name in self.get_diseases()
+
     def __repr__(self):
-        return f'<Label {self.user.username} -> {self.file.filename}: {self.disease}/{self.code}>'
+        diseases = self.get_diseases()
+        disease_str = ', '.join(diseases) if diseases else 'No disease'
+        return f'<Label {self.user.username} -> {self.file.filename}: {disease_str}/{self.code}>'
 
     def to_dict(self):
         return {
             'id': self.id,
             'user_id': self.user_id,
             'file_id': self.file_id,
-            'disease': self.disease,
+            'disease': self.get_diseases(),  # 리스트 형태로 반환
+            'disease_string': ', '.join(self.get_diseases()),  # 문자열 형태로도 제공
             'view_type': self.view_type,
             'code': self.code,
             'description': self.description,
