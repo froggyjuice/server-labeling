@@ -2094,7 +2094,7 @@ def dashboard():
                     <div class="help-section">
                         <h3>${{help.system_intro.title}}</h3>
                         <div style="white-space: pre-line; line-height: 1.6; color: #495057;">
-                            ${{help.system_intro.content.replace(/(\d+\.\s+[^\\n]+)/g, '<strong style="color: #2c3e50; font-size: 15px;">$1</strong>')}}
+                            ${{help.system_intro.content.replace(/(\\d+\\.\\s+[^\\\\n]+)/g, '<strong style="color: #2c3e50; font-size: 15px;">$1</strong>')}}
                         </div>
                     </div>
                 `;
