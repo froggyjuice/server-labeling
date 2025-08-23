@@ -33,99 +33,99 @@ def get_kst_now():
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-def init_database():
-    """데이터베이스 초기화 및 마이그레이션"""
-    with app.app_context():
-        # SSH 환경에서 데이터베이스 권한 문제 해결
-        try:
-            # 데이터베이스 권한 확인
-            ensure_database_permissions()
+# def init_database():
+#     """데이터베이스 초기화 및 마이그레이션"""
+#     with app.app_context():
+#         # SSH 환경에서 데이터베이스 권한 문제 해결
+#         try:
+#             # 데이터베이스 권한 확인
+#             ensure_database_permissions()
             
-            # 데이터베이스 엔진 생성
-            engine = db.engine
+#             # 데이터베이스 엔진 생성
+#             engine = db.engine
             
-            # 기존 테이블 확인
-            inspector = inspect(engine)
-            existing_tables = inspector.get_table_names()
+#             # 기존 테이블 확인
+#             inspector = inspect(engine)
+#             existing_tables = inspector.get_table_names()
             
-            print(f"기존 테이블: {existing_tables}")
+#             print(f"기존 테이블: {existing_tables}")
             
-            # 필요한 테이블 목록
-            required_tables = ['user', 'file', 'label']
+#             # 필요한 테이블 목록
+#             required_tables = ['user', 'file', 'label']
             
-            # 누락된 테이블 확인
-            missing_tables = [table for table in required_tables if table not in existing_tables]
+#             # 누락된 테이블 확인
+#             missing_tables = [table for table in required_tables if table not in existing_tables]
             
-            if missing_tables:
-                print(f"누락된 테이블: {missing_tables}")
-                print("테이블을 생성합니다...")
-                db.create_all()
-                print("모든 테이블이 생성되었습니다.")
-            else:
-                print("모든 필요한 테이블이 존재합니다.")
+#             if missing_tables:
+#                 print(f"누락된 테이블: {missing_tables}")
+#                 print("테이블을 생성합니다...")
+#                 db.create_all()
+#                 print("모든 테이블이 생성되었습니다.")
+#             else:
+#                 print("모든 필요한 테이블이 존재합니다.")
                 
-                # 기존 테이블 구조 확인
-                for table_name in required_tables:
-                    if table_name in existing_tables:
-                        columns = inspector.get_columns(table_name)
-                        print(f"\n{table_name} 테이블 구조:")
-                        for column in columns:
-                            print(f"  - {column['name']}: {column['type']}")
+#                 # 기존 테이블 구조 확인
+#                 for table_name in required_tables:
+#                     if table_name in existing_tables:
+#                         columns = inspector.get_columns(table_name)
+#                         print(f"\n{table_name} 테이블 구조:")
+#                         for column in columns:
+#                             print(f"  - {column['name']}: {column['type']}")
             
-            # 샘플 데이터 추가 (선택사항)
-            add_sample_data()
+#             # 샘플 데이터 추가 (선택사항)
+#             add_sample_data()
             
-        except Exception as e:
-            print(f"❌ 데이터베이스 초기화 중 오류: {e}")
-            print(f"오류 타입: {type(e).__name__}")
-            import traceback
-            print(f"상세 오류: {traceback.format_exc()}")
-            print("데이터베이스 권한 문제가 발생했습니다.")
-            print("SSH 환경에서 데이터베이스 파일 권한을 확인하세요.")
+#         except Exception as e:
+#             print(f"❌ 데이터베이스 초기화 중 오류: {e}")
+#             print(f"오류 타입: {type(e).__name__}")
+#             import traceback
+#             print(f"상세 오류: {traceback.format_exc()}")
+#             print("데이터베이스 권한 문제가 발생했습니다.")
+#             print("SSH 환경에서 데이터베이스 파일 권한을 확인하세요.")
 
-def add_sample_data():
-    """샘플 데이터 추가 (데이터베이스가 비어있을 때만)"""
-    try:
-        # 사용자가 없으면 샘플 사용자 추가
-        if User.query.count() == 0:
-            sample_user = User(
-                username="admin",
-                email="admin@example.com"
-            )
-            sample_user.set_password("password123")
-            db.session.add(sample_user)
-            db.session.commit()
-            print("샘플 사용자가 추가되었습니다: admin/password123")
+# def add_sample_data():
+#     """샘플 데이터 추가 (데이터베이스가 비어있을 때만)"""
+#     try:
+#         # 사용자가 없으면 샘플 사용자 추가
+#         if User.query.count() == 0:
+#             sample_user = User(
+#                 username="admin",
+#                 email="admin@example.com"
+#             )
+#             sample_user.set_password("password123")
+#             db.session.add(sample_user)
+#             db.session.commit()
+#             print("샘플 사용자가 추가되었습니다: admin/password123")
         
-        # 파일이 없으면 샘플 파일 정보 추가
-        if File.query.count() == 0:
-            # uploads 폴더의 파일들을 데이터베이스에 등록
-            if os.path.exists(UPLOAD_FOLDER):
-                for filename in os.listdir(UPLOAD_FOLDER):
-                    if filename.lower().endswith(('.txt', '.jpg', '.jpeg', '.png', '.dcm')):
-                        file_path = os.path.join(UPLOAD_FOLDER, filename)
-                        file_size = os.path.getsize(file_path)
+#         # 파일이 없으면 샘플 파일 정보 추가
+#         if File.query.count() == 0:
+#             # uploads 폴더의 파일들을 데이터베이스에 등록
+#             if os.path.exists(UPLOAD_FOLDER):
+#                 for filename in os.listdir(UPLOAD_FOLDER):
+#                     if filename.lower().endswith(('.txt', '.jpg', '.jpeg', '.png', '.dcm')):
+#                         file_path = os.path.join(UPLOAD_FOLDER, filename)
+#                         file_size = os.path.getsize(file_path)
                         
-                        # admin 사용자 찾기
-                        admin_user = User.query.filter_by(username="admin").first()
-                        if admin_user:
-                            sample_file = File(
-                                filename=filename,
-                                file_path=file_path,
-                                file_size=file_size,
-                                uploaded_by=admin_user.id
-                            )
-                            db.session.add(sample_file)
+#                         # admin 사용자 찾기
+#                         admin_user = User.query.filter_by(username="admin").first()
+#                         if admin_user:
+#                             sample_file = File(
+#                                 filename=filename,
+#                                 file_path=file_path,
+#                                 file_size=file_size,
+#                                 uploaded_by=admin_user.id
+#                             )
+#                             db.session.add(sample_file)
                 
-                db.session.commit()
-                print("샘플 파일 정보가 데이터베이스에 추가되었습니다.")
+#                 db.session.commit()
+#                 print("샘플 파일 정보가 데이터베이스에 추가되었습니다.")
         
-    except Exception as e:
-        print(f"샘플 데이터 추가 중 오류: {e}")
-        db.session.rollback()
+#     except Exception as e:
+#         print(f"샘플 데이터 추가 중 오류: {e}")
+#         db.session.rollback()
 
 # 데이터베이스 초기화
-init_database()
+# init_database()
 
 # 회원가입 API 엔드포인트
 @app.route('/api/register', methods=['POST'])
@@ -1697,7 +1697,7 @@ def dashboard():
                                 <strong>${{file.filename}}</strong><br>
                                 <small>업로드: ${{file.uploaded_by}} | 크기: ${{(file.file_size / 1024).toFixed(1)}}KB</small><br>
                                 <small>라벨링 기록: ${{file.user_label ? '✅' : '✖️'}}</small>
-                                ${{isImage ? `<br><img class="lazy" data-src="/api/files/${{file.id}}/image" style="max-width: 200px; max-height: 150px; margin-top: 10px; border-radius: 5px;" alt="썸네일">` : ''}}
+                                ${{isImage ? `<br><img src="/api/files/${{file.id}}/image" style="max-width: 200px; max-height: 150px; margin-top: 10px; border-radius: 5px;" alt="썸네일">` : ''}}
                             </div>
                             <div class="file-actions">
                                 <div class="label-buttons">
