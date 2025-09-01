@@ -380,17 +380,17 @@ def add_label():
         
         # 질환 유효성 검사 (리스트 형태로 처리)
         valid_diseases = [
-            'Respiratory Distress Syndrome', 'Bronchopulmonary Dysplasia', 
+            '정상', 'Respiratory Distress Syndrome', 'Bronchopulmonary Dysplasia', 
             'Pneumothorax', 'Pulmonary Interstitial Emphysema', 
             'Pneumomediastinum', 'Subcutaneous Emphysema', 
-            'Pneumopericardium', 'Necrotizing Enterocolitis'
+            'Pneumopericardium', 'Necrotizing Enterocolitis', '직접입력(추가)'
         ]
         
-        # disease가 리스트인지 확인하고 유효성 검사
-        if isinstance(diseases, str):
-            # 기존 단일 질환 형태와의 호환성을 위해
+        # disease가 리스트가 아니라면 리스트로 변환
+        if not isinstance(diseases, list):
             diseases = [diseases]
         
+        # 질환 유효성 검사
         for disease in diseases:
             if disease not in valid_diseases:
                 return jsonify({'success': False, 'error': f'올바르지 않은 질환입니다: {disease}'}), 400
@@ -538,6 +538,114 @@ def get_label_stats():
         
     except Exception as e:
         return jsonify({'success': False, 'error': '서버 오류가 발생했습니다.'}), 500
+
+# 데이터베이스 Excel 내보내기 API 엔드포인트 (권한 제한 없음)
+@app.route('/api/export/excel', methods=['GET'])
+def export_database_excel():
+    """데이터베이스를 Excel 파일로 내보내기 (권한 제한 없음)"""
+    try:
+        import pandas as pd
+        from io import BytesIO
+        from datetime import datetime
+        
+        print(f"📊 데이터베이스를 Excel로 내보내는 중...")
+        
+        # 1. 사용자 데이터 내보내기
+        users_data = []
+        users = User.query.all()
+        for user in users:
+            users_data.append({
+                'ID': user.id,
+                '사용자명': user.username,
+                '이메일': user.email,
+                '가입일': user.created_at.strftime('%Y-%m-%d %H:%M:%S') if user.created_at else ''
+            })
+        
+        # 2. 파일 데이터 내보내기
+        files_data = []
+        files = File.query.all()
+        for file in files:
+            size_kb = file.file_size / 1024 if file.file_size else 0
+            files_data.append({
+                'ID': file.id,
+                '파일명': file.filename,
+                '파일경로': file.file_path,
+                '크기(KB)': round(size_kb, 1),
+                '업로드일': file.upload_date.strftime('%Y-%m-%d %H:%M:%S') if file.upload_date else '',
+                '업로더ID': file.uploaded_by
+            })
+        
+        # 3. 라벨 데이터 내보내기
+        labels_data = []
+        labels = Label.query.all()
+        for label in labels:
+            labels_data.append({
+                'ID': label.id,
+                '사용자ID': label.user_id,
+                '파일ID': label.file_id,
+                '질환': label.disease,
+                '사진종류': label.view_type,
+                '코드': label.code,
+                '설명': label.description,
+                '생성일': label.created_at.strftime('%Y-%m-%d %H:%M:%S') if label.created_at else ''
+            })
+        
+        # Excel 파일 생성
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            # 사용자 시트
+            if users_data:
+                df_users = pd.DataFrame(users_data)
+                df_users.to_excel(writer, sheet_name='사용자', index=False)
+            
+            # 파일 시트
+            if files_data:
+                df_files = pd.DataFrame(files_data)
+                df_files.to_excel(writer, sheet_name='파일', index=False)
+            
+            # 라벨 시트
+            if labels_data:
+                df_labels = pd.DataFrame(labels_data)
+                df_labels.to_excel(writer, sheet_name='라벨', index=False)
+            
+            # 요약 시트
+            summary_data = {
+                '항목': ['사용자', '파일', '라벨', '총 크기(KB)'],
+                '개수': [
+                    len(users_data),
+                    len(files_data),
+                    len(labels_data),
+                    round(sum(f['크기(KB)'] for f in files_data), 1)
+                ]
+            }
+            df_summary = pd.DataFrame(summary_data)
+            df_summary.to_excel(writer, sheet_name='요약', index=False)
+        
+        output.seek(0)
+        
+        # 파일명에 현재 시간 추가
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        filename = f'database_export_{timestamp}.xlsx'
+        
+        print(f"✅ Excel 파일이 생성되었습니다: {filename}")
+        print(f"📊 내보낸 데이터:")
+        print(f"  - 사용자: {len(users_data)}명")
+        print(f"  - 파일: {len(files_data)}개")
+        print(f"  - 라벨: {len(labels_data)}개")
+        print(f"  - 총 크기: {round(sum(f['크기(KB)'] for f in files_data), 1)}KB")
+        
+        return send_file(
+            output,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            as_attachment=True,
+            download_name=filename
+        )
+        
+    except ImportError:
+        return jsonify({'success': False, 'error': 'Excel export를 위해 필요한 패키지가 설치되지 않았습니다. pandas와 openpyxl을 설치해주세요.'}), 500
+    except Exception as e:
+        print(f"❌ Excel 내보내기 오류: {e}")
+        return jsonify({'success': False, 'error': 'Excel 파일 생성 중 오류가 발생했습니다.'}), 500
 
 # 라벨링 방법 도움말 API 엔드포인트
 @app.route('/api/help', methods=['GET'])
@@ -702,6 +810,20 @@ def dashboard():
                 align-items: center;
             }}
             
+            .export-btn {{
+                padding: 10px 20px;
+                background-color: #28a745;
+                color: white;
+                border: none;
+                border-radius: 5px;
+                cursor: pointer;
+                margin-right: 10px;
+            }}
+            
+            .export-btn:hover {{
+                background-color: #218838;
+            }}
+            
             .help-btn {{
                 padding: 10px 20px;
                 background-color: #17a2b8;
@@ -814,6 +936,9 @@ def dashboard():
                 font-size: 12px;
                 color: #666;
             }}
+            
+
+            
             .message {{
                 margin: 10px 0;
                 padding: 10px;
@@ -1399,6 +1524,7 @@ def dashboard():
             <div class="header">
                 <h1>🏷️ 라벨링 시스템 - 환영합니다, {user.username}님!</h1>
                 <div class="header-buttons">
+                    <button class="export-btn" onclick="exportDatabase()">📊 Excel 내보내기</button>
                     <button class="help-btn" onclick="showHelp()">❓ 도움말</button>
                     <button class="logout-btn" onclick="logout()">로그아웃</button>
                 </div>
@@ -1418,7 +1544,13 @@ def dashboard():
                         <div class="stat-number" id="userLabels">0</div>
                         <div class="stat-label">내 라벨링</div>
                     </div>
+                    <div class="stat-item">
+                        <div class="stat-number" id="totalLabels">0</div>
+                        <div class="stat-label">전체 라벨링</div>
+                    </div>
                 </div>
+                
+
                 
                 <div id="message"></div>
                 
@@ -1487,6 +1619,10 @@ def dashboard():
                                 <input type="checkbox" id="disease_nec" value="Necrotizing Enterocolitis" onchange="updateSymptoms()">
                                 <label for="disease_nec">Necrotizing Enterocolitis</label>
                             </div>
+                            <div class="disease-option">
+                                <input type="checkbox" id="disease_custom" value="직접입력(추가)" onchange="updateSymptoms()">
+                                <label for="disease_custom">직접입력(추가)</label>
+                            </div>
                         </div>
                     </div>
                     
@@ -1516,6 +1652,11 @@ def dashboard():
                     <div class="form-group">
                         <label for="descriptionInput">최종 소견:</label>
                         <textarea id="descriptionInput" placeholder="선택된 소견들이 자동으로 입력됩니다." readonly></textarea>
+                    </div>
+                    
+                    <div class="form-group" id="customInputGroup" style="display: none;">
+                        <label for="customInput">직접 입력:</label>
+                        <textarea id="customInput" placeholder="추가로 입력할 내용을 작성해주세요." rows="3" oninput="debouncedUpdateCodeAndDescription()"></textarea>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -1632,6 +1773,8 @@ def dashboard():
                 document.getElementById('userLabels').textContent = userLabels;
             }}
             
+
+            
             // 페이지네이션 업데이트
             function updatePagination(pagination) {{
                 const paginationDiv = document.getElementById('pagination');
@@ -1697,7 +1840,7 @@ def dashboard():
                                 <strong>${{file.filename}}</strong><br>
                                 <small>업로드: ${{file.uploaded_by}} | 크기: ${{(file.file_size / 1024).toFixed(1)}}KB</small><br>
                                 <small>라벨링 기록: ${{file.user_label ? '✅' : '✖️'}}</small>
-                                ${{isImage ? `<br><img src="/api/files/${{file.id}}/image" style="max-width: 200px; max-height: 150px; margin-top: 10px; border-radius: 5px;" alt="썸네일">` : ''}}
+                                ${{isImage ? `<br><img class="lazy" data-src="/api/files/${{file.id}}/image" style="max-width: 200px; max-height: 150px; margin-top: 10px; border-radius: 5px;" alt="썸네일">` : ''}}
                             </div>
                             <div class="file-actions">
                                 <div class="label-buttons">
@@ -1734,6 +1877,12 @@ def dashboard():
                 document.getElementById('codeInput').value = '';
                 document.getElementById('descriptionInput').value = '';
                 document.getElementById('symptomsContainer').innerHTML = '<p>질환을 먼저 선택해주세요.</p>';
+                
+                // 직접 입력 필드 초기화
+                const customInputGroup = document.getElementById('customInputGroup');
+                const customInput = document.getElementById('customInput');
+                if (customInputGroup) customInputGroup.style.display = 'none';
+                if (customInput) customInput.value = '';
                 
                 // 기존 라벨링 기록이 있는지 확인
                 if (currentFileId) {{
@@ -1773,19 +1922,35 @@ def dashboard():
                 updateSymptoms();
                 
                 // 코드와 설명 설정 (소견 업데이트 후에 실행)
-                setTimeout(() => {{
-                    document.getElementById('codeInput').value = label.code;
-                    document.getElementById('descriptionInput').value = label.description;
-                    
-                    // 선택된 소견 체크박스 설정
-                    const codes = label.code.split(', ').map(code => code.trim());
-                    codes.forEach(code => {{
+                document.getElementById('codeInput').value = label.code;
+                document.getElementById('descriptionInput').value = label.description;
+                
+                // 직접입력(추가)가 포함된 경우 직접 입력 필드에 내용 설정
+                if (diseases.includes('직접입력(추가)')) {{
+                    const customInput = document.getElementById('customInput');
+                    if (customInput) {{
+                        // 코드에서 CUSTOM 부분을 찾아서 직접 입력 내용 추출
+                        const codes = label.code.split(', ').map(code => code.trim());
+                        const descriptions = label.description.split('\\n');
+                        
+                        // CUSTOM 코드가 있으면 해당하는 설명을 직접 입력 필드에 설정
+                        const customIndex = codes.indexOf('CUSTOM');
+                        if (customIndex !== -1 && descriptions[customIndex]) {{
+                            customInput.value = descriptions[customIndex];
+                        }}
+                    }}
+                }}
+                
+                // 선택된 소견 체크박스 설정 (CUSTOM 제외)
+                const codes = label.code.split(', ').map(code => code.trim());
+                codes.forEach(code => {{
+                    if (code !== 'CUSTOM') {{
                         const checkbox = document.getElementById(code);
                         if (checkbox) {{
                             checkbox.checked = true;
                         }}
-                    }});
-                }}, 100);
+                    }}
+                }});
             }}
             
             // 질환 선택에 따른 소견 업데이트
@@ -1817,6 +1982,13 @@ def dashboard():
                     selectedDiseases.splice(selectedDiseases.indexOf('정상'), 1);
                 }}
                 
+                // 직접입력(추가) 선택 여부 확인
+                const hasCustomInput = selectedDiseases.includes('직접입력(추가)');
+                if (hasCustomInput) {{
+                    // 직접입력(추가) 제거하고 다른 질환만 처리
+                    selectedDiseases.splice(selectedDiseases.indexOf('직접입력(추가)'), 1);
+                }}
+                
                 // 모든 선택된 질환의 소견들을 합쳐서 표시
                 let allSymptoms = [];
                 selectedDiseases.forEach(disease => {{
@@ -1826,7 +1998,33 @@ def dashboard():
                     }}
                 }});
                 
-                if (allSymptoms.length === 0) {{
+                // 직접입력(추가)만 선택된 경우 표를 보이지 않게 함
+                if (hasCustomInput && allSymptoms.length === 0) {{
+                    container.innerHTML = '<p>직접 입력 내용을 작성해주세요.</p>';
+                    codeInput.readOnly = true;
+                    descriptionInput.readOnly = true;
+                    // 직접입력(추가)만 선택된 경우 코드와 설명 초기화
+                    updateCodeAndDescription();
+                    // 직접입력 필드 표시
+                    const customInputGroup = document.getElementById('customInputGroup');
+                    if (customInputGroup) customInputGroup.style.display = 'block';
+                    return;
+                }}
+                
+                // 직접입력(추가)만 선택된 경우 (다른 질환 없음)
+                if (selectedDiseases.length === 1 && selectedDiseases[0] === '직접입력(추가)') {{
+                    container.innerHTML = '<p>직접 입력 내용을 작성해주세요.</p>';
+                    codeInput.readOnly = true;
+                    descriptionInput.readOnly = true;
+                    // 직접입력(추가)만 선택된 경우 코드와 설명 초기화
+                    updateCodeAndDescription();
+                    // 직접입력 필드 표시
+                    const customInputGroup = document.getElementById('customInputGroup');
+                    if (customInputGroup) customInputGroup.style.display = 'block';
+                    return;
+                }}
+                
+                if (allSymptoms.length === 0 && !hasCustomInput) {{
                     container.innerHTML = '<p>선택된 질환에 대한 소견이 없습니다.</p>';
                     codeInput.readOnly = true;
                     descriptionInput.readOnly = true;
@@ -1851,6 +2049,22 @@ def dashboard():
                 container.innerHTML = html;
                 codeInput.readOnly = true;
                 descriptionInput.readOnly = true;
+                
+                // 직접입력(추가) 선택 시 입력 필드 표시
+                const customInputGroup = document.getElementById('customInputGroup');
+                if (hasCustomInput) {{
+                    customInputGroup.style.display = 'block';
+                }} else {{
+                    customInputGroup.style.display = 'none';
+                    // 직접입력(추가) 해제 시 입력 내용 삭제
+                    const customInput = document.getElementById('customInput');
+                    if (customInput) customInput.value = '';
+                }}
+                
+                // 직접입력(추가)만 선택된 경우에도 입력 필드 표시
+                if (selectedDiseases.length === 1 && selectedDiseases[0] === '직접입력(추가)') {{
+                    if (customInputGroup) customInputGroup.style.display = 'block';
+                }}
             }}
             
             // 선택된 질환들 가져오기
@@ -1923,12 +2137,25 @@ def dashboard():
                 return symptoms[disease] || [];
             }}
             
+            // 디바운스된 코드와 설명 업데이트 (중복 호출 방지)
+            let updateTimeout = null;
+            function debouncedUpdateCodeAndDescription() {{
+                if (updateTimeout) {{
+                    clearTimeout(updateTimeout);
+                }}
+                updateTimeout = setTimeout(() => {{
+                    updateCodeAndDescription();
+                }}, 300); // 300ms 지연
+            }}
+            
             // 선택된 소견에 따라 코드와 설명 업데이트
             function updateCodeAndDescription() {{
                 const selectedDiseases = getSelectedDiseases();
                 
-                // 정상만 선택된 경우 처리하지 않음
+                // 정상만 선택된 경우에도 처리
                 if (selectedDiseases.length === 1 && selectedDiseases[0] === '정상') {{
+                    document.getElementById('codeInput').value = 'NORMAL';
+                    document.getElementById('descriptionInput').value = '정상';
                     return;
                 }}
                 
@@ -1939,9 +2166,73 @@ def dashboard():
                 checkboxes.forEach(checkbox => {{
                     codes.push(checkbox.value);
                     const label = document.querySelector(`label[for="${{checkbox.value}}"]`);
-                    descriptions.push(label.textContent);
+                    if (label && label.textContent) {{
+                        descriptions.push(label.textContent);
+                    }}
                 }});
                 
+                // 직접 입력 내용 추가 (중복 방지)
+                const customInput = document.getElementById('customInput');
+                let customText = '';
+                if (customInput && customInput.value.trim()) {{
+                    // 이미 CUSTOM이 codes에 있는지 확인
+                    if (!codes.includes('CUSTOM')) {{
+                        codes.push('CUSTOM');
+                    }}
+                    customText = customInput.value.trim();
+                    // 이미 customText가 descriptions에 있는지 확인
+                    if (!descriptions.includes(customText)) {{
+                        descriptions.push(customText);
+                    }}
+                }}
+                
+                // 직접입력(추가)만 선택된 경우
+                if (selectedDiseases.includes('직접입력(추가)') && codes.length === 0) {{
+                    if (customText) {{
+                        // 직접 입력 내용이 있는 경우
+                        document.getElementById('codeInput').value = 'CUSTOM';
+                        document.getElementById('descriptionInput').value = customText;
+                    }} else {{
+                        // 직접 입력 내용이 없는 경우
+                        document.getElementById('codeInput').value = 'CUSTOM';
+                        document.getElementById('descriptionInput').value = '직접 입력 내용을 작성해주세요.';
+                    }}
+                    // 직접입력 필드 표시
+                    const customInputGroup = document.getElementById('customInputGroup');
+                    if (customInputGroup) customInputGroup.style.display = 'block';
+                    return;
+                }}
+                
+                // 직접입력(추가)만 선택된 경우 (다른 질환 없음)
+                if (selectedDiseases.length === 1 && selectedDiseases[0] === '직접입력(추가)') {{
+                    if (customText) {{
+                        // 직접 입력 내용이 있는 경우
+                        document.getElementById('codeInput').value = 'CUSTOM';
+                        document.getElementById('descriptionInput').value = customText;
+                    }} else {{
+                        // 직접 입력 내용이 없는 경우
+                        document.getElementById('codeInput').value = 'CUSTOM';
+                        document.getElementById('descriptionInput').value = '직접 입력 내용을 작성해주세요.';
+                    }}
+                    // 직접입력 필드 표시
+                    const customInputGroup = document.getElementById('customInputGroup');
+                    if (customInputGroup) customInputGroup.style.display = 'block';
+                    return;
+                }}
+                
+                // 직접입력(추가)와 다른 질환이 함께 선택된 경우
+                if (selectedDiseases.includes('직접입력(추가)') && codes.length > 0) {{
+                    // 기존 소견 + 직접 입력 내용 (중복 방지)
+                    let finalDescriptions = [...descriptions];
+                    if (customText && !finalDescriptions.includes(customText)) {{
+                        finalDescriptions.push(customText);
+                    }}
+                    document.getElementById('codeInput').value = codes.join(', ');
+                    document.getElementById('descriptionInput').value = finalDescriptions.join('\\n');
+                    return;
+                }}
+                
+                // 일반적인 경우 (직접입력(추가) 없음)
                 document.getElementById('codeInput').value = codes.join(', ');
                 document.getElementById('descriptionInput').value = descriptions.join('\\n');
             }}
@@ -1971,10 +2262,22 @@ def dashboard():
                     return;
                 }}
                 
-                // 정상이 아닌 경우에만 코드 검증
-                if (!(selectedDiseases.length === 1 && selectedDiseases[0] === '정상') && !code) {{
+                // 정상이 아닌 경우에만 코드 검증 (직접입력만 선택한 경우 제외)
+                if (!(selectedDiseases.length === 1 && selectedDiseases[0] === '정상') && 
+                    !(selectedDiseases.length === 1 && selectedDiseases[0] === '직접입력(추가)') && 
+                    !code) {{
                     showMessage('소견을 선택해주세요.', 'error');
                     return;
+                }}
+                
+                // 직접입력(추가) 선택 시 직접 입력 내용 검증
+                if (selectedDiseases.includes('직접입력(추가)')) {{
+                    const customInput = document.getElementById('customInput');
+                    if (!customInput || !customInput.value.trim()) {{
+                        showMessage('직접 입력 내용을 작성해주세요.', 'error');
+                        if (customInput) customInput.focus();
+                        return;
+                    }}
                 }}
                 
                 addLabel(currentFileId, selectedDiseases, viewType, code, description);
@@ -2094,7 +2397,7 @@ def dashboard():
                     <div class="help-section">
                         <h3>${{help.system_intro.title}}</h3>
                         <div style="white-space: pre-line; line-height: 1.6; color: #495057;">
-                            ${{help.system_intro.content.replace(/(\\d+\\.\\s+[^\\\\n]+)/g, '<strong style="color: #2c3e50; font-size: 15px;">$1</strong>')}}
+                            ${{help.system_intro.content.replace(/(\d+\.\s+[^\\n]+)/g, '<strong style="color: #2c3e50; font-size: 15px;">$1</strong>')}}
                         </div>
                     </div>
                 `;
@@ -2179,6 +2482,27 @@ def dashboard():
             // 도움말 모달 닫기
             function closeHelpModal() {{
                 document.getElementById('helpModal').style.display = 'none';
+            }}
+            
+            // 데이터베이스 Excel 내보내기
+            function exportDatabase() {{
+                // 로딩 표시
+                const exportBtn = event.target;
+                const originalText = exportBtn.textContent;
+                exportBtn.textContent = '📊 내보내는 중...';
+                exportBtn.disabled = true;
+                
+                // Excel 파일 다운로드
+                window.open('/api/export/excel', '_blank');
+                
+                // 버튼 상태 복원
+                setTimeout(() => {{
+                    exportBtn.textContent = originalText;
+                    exportBtn.disabled = false;
+                }}, 2000);
+                
+                // 성공 메시지 표시
+                showMessage('Excel 파일 다운로드가 시작되었습니다.', 'success');
             }}
             
 
