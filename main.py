@@ -542,8 +542,24 @@ def get_label_stats():
 # 데이터베이스 Excel 내보내기 API 엔드포인트 (권한 제한 없음)
 @app.route('/api/export/excel', methods=['GET'])
 def export_database_excel():
-    """데이터베이스를 Excel 파일로 내보내기 (권한 제한 없음)"""
+    """데이터베이스를 Excel 파일로 내보내기 (특정 사용자만 가능)"""
     try:
+        # 사용자 권한 확인 (하드코딩)
+        allowed_users = ['김현호', 'testuser1']
+        
+        # 현재 로그인된 사용자 확인
+        user_id = session.get('user_id')
+        if not user_id:
+            return jsonify({'success': False, 'error': '로그인이 필요합니다.'}), 401
+        
+        current_user = User.query.get(user_id)
+        if not current_user:
+            return jsonify({'success': False, 'error': '사용자 정보를 찾을 수 없습니다.'}), 401
+        
+        # 허용된 사용자인지 확인
+        if current_user.username not in allowed_users:
+            return jsonify({'success': False, 'error': '엑셀 다운로드 권한이 없습니다. 관리자에게 문의하세요.'}), 403
+        
         import pandas as pd
         from io import BytesIO
         from datetime import datetime
@@ -1524,7 +1540,8 @@ def dashboard():
             <div class="header">
                 <h1>🏷️ 라벨링 시스템 - 환영합니다, {user.username}님!</h1>
                 <div class="header-buttons">
-                    <button class="export-btn" onclick="exportDatabase()">📊 Excel 내보내기</button>
+                    <!-- 권한이 있는 사용자만 엑셀 다운로드 버튼 표시 -->
+                    <button class="export-btn" onclick="exportDatabase()" style="display: {user.username in ['김현호', 'testuser1'] and 'inline-block' or 'none'}">📊 Excel 내보내기</button>
                     <button class="help-btn" onclick="showHelp()">❓ 도움말</button>
                     <button class="logout-btn" onclick="logout()">로그아웃</button>
                 </div>
@@ -2486,6 +2503,15 @@ def dashboard():
             
             // 데이터베이스 Excel 내보내기
             function exportDatabase() {{
+                // 사용자 권한 확인
+                const currentUsername = '{user.username}'; // 서버에서 전달된 사용자명
+                const allowedUsers = ['김현호', 'testuser1'];
+                
+                if (!allowedUsers.includes(currentUsername)) {{
+                    showMessage('엑셀 다운로드 권한이 없습니다. 관리자에게 문의하세요.', 'error');
+                    return;
+                }}
+                
                 // 로딩 표시
                 const exportBtn = event.target;
                 const originalText = exportBtn.textContent;
