@@ -1540,8 +1540,7 @@ def dashboard():
             <div class="header">
                 <h1>🏷️ 라벨링 시스템 - 환영합니다, {user.username}님!</h1>
                 <div class="header-buttons">
-                    <!-- 권한이 있는 사용자만 엑셀 다운로드 버튼 표시 -->
-                    <button class="export-btn" onclick="exportDatabase()" style="display: {user.username in ['김현호', 'testuser1'] and 'inline-block' or 'none'}">📊 Excel 내보내기</button>
+                    <button class="export-btn" onclick="exportDatabase()" style="display: {'inline-block' if user.username in ['김현호', 'testuser1'] else 'none'}">📊 Excel 내보내기</button>
                     <button class="help-btn" onclick="showHelp()">❓ 도움말</button>
                     <button class="logout-btn" onclick="logout()">로그아웃</button>
                 </div>
@@ -2503,32 +2502,24 @@ def dashboard():
             
             // 데이터베이스 Excel 내보내기
             function exportDatabase() {{
-                // 사용자 권한 확인
-                const currentUsername = '{user.username}'; // 서버에서 전달된 사용자명
-                const allowedUsers = ['김현호', 'testuser1'];
-                
-                if (!allowedUsers.includes(currentUsername)) {{
-                    showMessage('엑셀 다운로드 권한이 없습니다. 관리자에게 문의하세요.', 'error');
+                const currentUsername = '{user.username}';
+                if (!['김현호', 'testuser1'].includes(currentUsername)) {{
+                    showMessage('권한이 없습니다.', 'error');
                     return;
                 }}
                 
-                // 로딩 표시
                 const exportBtn = event.target;
-                const originalText = exportBtn.textContent;
                 exportBtn.textContent = '📊 내보내는 중...';
                 exportBtn.disabled = true;
                 
-                // Excel 파일 다운로드
                 window.open('/api/export/excel', '_blank');
                 
-                // 버튼 상태 복원
                 setTimeout(() => {{
-                    exportBtn.textContent = originalText;
+                    exportBtn.textContent = '📊 Excel 내보내기';
                     exportBtn.disabled = false;
                 }}, 2000);
                 
-                // 성공 메시지 표시
-                showMessage('Excel 파일 다운로드가 시작되었습니다.', 'success');
+                showMessage('Excel 다운로드 시작', 'success');
             }}
             
 
